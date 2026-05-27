@@ -202,9 +202,9 @@ export async function startLivePreview(
   const isMetal = synthParams.synthType === 'MetalSynth';
 
   if (isNoise) {
-    (synth as Tone.NoiseSynth).triggerAttack();
+    (synth as Tone.NoiseSynth).triggerAttack(Tone.now());
   } else if (isMetal) {
-    (synth as Tone.MetalSynth).triggerAttack();
+    (synth as Tone.MetalSynth).triggerAttack(synthParams.note, Tone.now());
   } else {
     (synth as Tone.Synth).triggerAttack(synthParams.note);
   }
@@ -235,9 +235,9 @@ export async function renderSoundToWav(
     const noteDuration = Math.min(duration * 0.8, 1.5);
 
     if (isNoise) {
-      (synth as Tone.NoiseSynth).triggerAttackRelease(noteDuration);
+      (synth as Tone.NoiseSynth).triggerAttackRelease(noteDuration, Tone.now());
     } else if (isMetal) {
-      (synth as Tone.MetalSynth).triggerAttackRelease(noteDuration);
+      (synth as Tone.MetalSynth).triggerAttackRelease(synthParams.note, noteDuration);
     } else {
       (synth as Tone.Synth).triggerAttackRelease(synthParams.note, noteDuration);
     }

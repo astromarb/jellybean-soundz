@@ -1,0 +1,201 @@
+import React, { useState, useCallback } from 'react';
+import * as Tone from 'tone';
+import { Sound, SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from './types';
+import { useSounds } from './hooks/useSounds';
+import { usePads } from './hooks/usePads';
+import { playAudioBlob } from './lib/audio';
+import * as db from './lib/db';
+
+import Header from './components/Header';
+import SoundLibrary from './components/SoundLibrary';
+import PadGrid from './components/PadGrid';
+import Editor from './components/Editor';
+import WaveformDisplay from './components/WaveformDisplay';
+
+export default function App() {
+  const { sounds, loading, addSound, deleteSound, downloadSound, exportAllSounds } = useSounds();
+  const { pads, assignSound, clearPad, renamePad } = usePads();
+
+  const [selectedSound, setSelectedSound] = useState<Sound | null>(null);
+  const [synthParams, setSynthParams] = useState<SynthParams>(DEFAULT_SYNTH_PARAMS);
+  const [effects, setEffects] = useState<EffectsParams>(DEFAULT_EFFECTS);
+  const [soundName, setSoundName] = useState('New Sound');
+  const [isSaving, setIsSaving] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioPrompt, setAudioPrompt] = useState(true);
+
+  // Enable audio on first interaction
+  const enableAudio = useCallback(async () => {
+    try {
+      await Tone.start();
+      setAudioEnabled(true);
+      setAudioPrompt(false);
+    } catch (err) {
+      console.error('Could not start audio context:', err);
+    }
+  }, []);
+
+  const handleSelectSound = useCallback((sound: Sound) => {
+    setSelectedSound(sound);
+    setSynthParams(sound.synthParams);
+    setEffects(sound.effects);
+    setSoundName(sound.name);
+  }, []);
+
+  const handlePlaySound = useCallback(async (sound: Sound) => {
+    if (!audioEnabled) await enableAudio();
+    setSelectedSound(sound);
+    try {
+      const blob = await db.getAudioBlob(sound.id);
+      if (blob) await playAudioBlob(blob);
+    } catch (err) {
+      console.error('Error playing sound:', err);
+    }
+  }, [audioEnabled, enableAudio]);
+
+  const handleDeleteSound = useCallback(async (sound: Sound) => {
+    await deleteSound(sound.id);
+    if (selectedSound?.id === sound.id) {
+      setSelectedSound(null);
+    }
+  }, [deleteSound, selectedSound]);
+
+  const handleNewSound = useCallback(() => {
+    setSelectedSound(null);
+    setSynthParams(DEFAULT_SYNTH_PARAMS);
+    setEffects(DEFAULT_EFFECTS);
+    setSoundName('New Sound');
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!soundName.trim() || isSaving) return;
+    if (!audioEnabled) await enableAudio();
+
+    setIsSaving(true);
+    try {
+      const saved = await addSound(soundName.trim(), synthParams, effects, 2);
+      setSelectedSound(saved);
+    } catch (err) {
+      console.error('Error saving sound:', err);
+      alert('Failed to save sound. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [soundName, isSaving, audioEnabled, enableAudio, addSound, synthParams, effects]);
+
+  const handleReset = useCallback(() => {
+    setSynthParams(DEFAULT_SYNTH_PARAMS);
+    setEffects(DEFAULT_EFFECTS);
+    setSoundName('New Sound');
+    setSelectedSound(null);
+  }, []);
+
+  // Wrappers to enable audio on first pad play
+  const handleAssignSound = useCallback(
+    async (padIndex: number, soundId: string) => {
+      await assignSound(padIndex, soundId);
+    },
+    [assignSound]
+  );
+
+  const handleSelectSoundFromPad = useCallback(
+    (sound: Sound) => {
+      handleSelectSound(sound);
+    },
+    [handleSelectSound]
+  );
+
+  if (loading) {
+    return (
+      <div className="h-screen bg-gray-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="text-4xl">🍬</div>
+          <div className="w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+          <div className="text-gray-400 text-sm font-mono">Loading jellybean soundz...</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-950 overflow-hidden" onClick={audioEnabled ? undefined : enableAudio}>
+      {/* Audio enable overlay */}
+      {audioPrompt && !audioEnabled && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/90 backdrop-blur-sm cursor-pointer"
+          onClick={enableAudio}
+        >
+          <div className="text-center space-y-4 p-8">
+            <div className="text-6xl">🍬</div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
+              jellybean soundz
+            </h1>
+            <p className="text-gray-400 text-sm">Click anywhere to enable audio</p>
+            <div className="flex justify-center gap-2 mt-4">
+              {['#FF3B5C', '#FF7A00', '#FFB800', '#00FF7A', '#0095FF', '#7700FF', '#FF00CC'].map((c) => (
+                <div
+                  key={c}
+                  className="w-4 h-4 rounded-full animate-bounce"
+                  style={{
+                    backgroundColor: c,
+                    boxShadow: `0 0 10px ${c}`,
+                    animationDelay: `${Math.random() * 0.5}s`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <Header onExportAll={exportAllSounds} />
+
+      {/* Main layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left: Sound Library */}
+        <div className="w-48 shrink-0">
+          <SoundLibrary
+            sounds={sounds}
+            selectedSound={selectedSound}
+            onSelectSound={handleSelectSound}
+            onPlaySound={handlePlaySound}
+            onDeleteSound={handleDeleteSound}
+            onDownloadSound={downloadSound}
+            onNewSound={handleNewSound}
+          />
+        </div>
+
+        {/* Center: Pad Grid */}
+        <div className="flex-1 min-w-0">
+          <PadGrid
+            pads={pads}
+            sounds={sounds}
+            onAssignSound={handleAssignSound}
+            onClearPad={clearPad}
+            onRenamePad={renamePad}
+            onSelectSound={handleSelectSoundFromPad}
+          />
+        </div>
+
+        {/* Right: Editor */}
+        <div className="w-64 shrink-0">
+          <Editor
+            synthParams={synthParams}
+            effects={effects}
+            soundName={soundName}
+            isSaving={isSaving}
+            onSynthParamsChange={setSynthParams}
+            onEffectsChange={setEffects}
+            onSoundNameChange={setSoundName}
+            onSave={handleSave}
+            onReset={handleReset}
+          />
+        </div>
+      </div>
+
+      {/* Bottom: Waveform Display */}
+      <WaveformDisplay selectedSound={selectedSound} />
+    </div>
+  );
+}

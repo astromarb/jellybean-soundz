@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Sound, Magazine, Page } from '../types';
+import { Sound, Magazine, Page, Chain } from '../types';
 
 interface JellybeanDB extends DBSchema {
   sounds: {
@@ -20,40 +20,39 @@ interface JellybeanDB extends DBSchema {
     value: Page;
     indexes: { 'by-magazineId': string };
   };
+  chains: {
+    key: string;
+    value: Chain;
+    indexes: { 'by-createdAt': number };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<JellybeanDB>> | null = null;
 
 function getDb(): Promise<IDBPDatabase<JellybeanDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<JellybeanDB>('jellybean-soundz', 2, {
+    dbPromise = openDB<JellybeanDB>('jellybean-soundz', 3, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
+        // --- Fresh install ---
         if (oldVersion === 0) {
-          // Fresh install — create v2 schema
           const soundStore = db.createObjectStore('sounds', { keyPath: 'id' });
           soundStore.createIndex('by-createdAt', 'createdAt');
           db.createObjectStore('audioBlobs', { keyPath: 'id' });
           db.createObjectStore('magazines', { keyPath: 'id' });
           const pageStore = db.createObjectStore('pages', { keyPath: 'id' });
           pageStore.createIndex('by-magazineId', 'magazineId');
+          const chainStore = db.createObjectStore('chains', { keyPath: 'id' });
+          chainStore.createIndex('by-createdAt', 'createdAt');
+          return;
         }
 
+        // --- v1 → v2/v3: migrate padAssignments to magazines + pages ---
         if (oldVersion === 1) {
-          // Migrate: preserve padAssignments → default magazine + page
           let oldPads: { padIndex: number; soundId: string | null; padName: string }[] = [];
           try {
             oldPads = await (transaction as any).objectStore('padAssignments').getAll();
-          } catch (_) { /* no assignments yet */ }
-
+          } catch (_) { /* no assignments */ }
           try { (db as any).deleteObjectStore('padAssignments'); } catch (_) { /* already gone */ }
-
-          // Sounds & audioBlobs stores already exist from v1 — add indexes that might be missing
-          try {
-            const soundStore = (transaction as any).objectStore('sounds');
-            if (!soundStore.indexNames.contains('by-createdAt')) {
-              soundStore.createIndex('by-createdAt', 'createdAt');
-            }
-          } catch (_) { /* index already exists */ }
 
           db.createObjectStore('magazines', { keyPath: 'id' });
           const pageStore = db.createObjectStore('pages', { keyPath: 'id' });
@@ -62,17 +61,18 @@ function getDb(): Promise<IDBPDatabase<JellybeanDB>> {
           const now = Date.now();
           const magId = `mag-default-${now}`;
           const pageId = `page-default-${now}`;
-
           const padMap = new Map(oldPads.map((p) => [p.padIndex, p]));
           const pads = Array.from({ length: 16 }, (_, i) =>
             padMap.get(i) ?? { padIndex: i, soundId: null, padName: `Pad ${i + 1}` }
           );
+          await (transaction as any).objectStore('magazines').put({ id: magId, name: 'Default', color: '#7700FF', createdAt: now, order: 0 });
+          await (transaction as any).objectStore('pages').put({ id: pageId, name: 'Main', magazineId: magId, pads, createdAt: now, order: 0 });
+        }
 
-          const magTx = (transaction as any).objectStore('magazines');
-          const pageTx = (transaction as any).objectStore('pages');
-
-          await magTx.put({ id: magId, name: 'Default', color: '#7700FF', createdAt: now, order: 0 });
-          await pageTx.put({ id: pageId, name: 'Main', magazineId: magId, pads, createdAt: now, order: 0 });
+        // --- v1 and v2 both need the chains store (v3 addition) ---
+        if (oldVersion < 3) {
+          const chainStore = db.createObjectStore('chains', { keyPath: 'id' });
+          chainStore.createIndex('by-createdAt', 'createdAt');
         }
       },
     });
@@ -144,4 +144,20 @@ export async function savePage(page: Page): Promise<void> {
 export async function deletePage(id: string): Promise<void> {
   const db = await getDb();
   await db.delete('pages', id);
+}
+
+// Chains CRUD
+export async function getAllChains(): Promise<Chain[]> {
+  const db = await getDb();
+  return db.getAllFromIndex('chains', 'by-createdAt');
+}
+
+export async function saveChain(chain: Chain): Promise<void> {
+  const db = await getDb();
+  await db.put('chains', chain);
+}
+
+export async function deleteChain(id: string): Promise<void> {
+  const db = await getDb();
+  await db.delete('chains', id);
 }

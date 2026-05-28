@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from '../types';
+import { Sound, SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from '../types';
 import SynthControls from './SynthControls';
 import EffectsPanel from './EffectsPanel';
 import { startLivePreview, stopLivePreview } from '../lib/audio';
@@ -12,10 +12,12 @@ interface EditorProps {
   effects: EffectsParams;
   soundName: string;
   isSaving: boolean;
+  editingSound?: Sound | null;
   onSynthParamsChange: (params: SynthParams) => void;
   onEffectsChange: (effects: EffectsParams) => void;
   onSoundNameChange: (name: string) => void;
   onSave: () => void;
+  onUpdate?: () => void;
   onReset: () => void;
 }
 
@@ -24,10 +26,12 @@ export default function Editor({
   effects,
   soundName,
   isSaving,
+  editingSound,
   onSynthParamsChange,
   onEffectsChange,
   onSoundNameChange,
   onSave,
+  onUpdate,
   onReset,
 }: EditorProps) {
   const [tab, setTab] = useState<EditorTab>('synth');
@@ -58,11 +62,29 @@ export default function Editor({
     onEffectsChange(randomizeEffects());
   };
 
+  const isEditing = !!editingSound;
+
   return (
     <div className="flex flex-col h-full bg-gray-900 border-l border-gray-800">
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-800 shrink-0">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Editor</h2>
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 flex-1">
+            {isEditing ? 'Editing' : 'New Sound'}
+          </h2>
+          {isEditing && (
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{
+                backgroundColor: `${editingSound!.color}25`,
+                color: editingSound!.color,
+                border: `1px solid ${editingSound!.color}50`,
+              }}
+            >
+              {editingSound!.synthParams.synthType.replace('Synth', '')}
+            </span>
+          )}
+        </div>
         <input
           type="text"
           value={soundName}
@@ -153,33 +175,71 @@ export default function Editor({
           )}
         </div>
 
-        {/* Save */}
-        <button
-          onClick={onSave}
-          disabled={isSaving || !soundName.trim()}
-          className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all shadow-lg hover:shadow-purple-500/25"
-        >
-          {isSaving ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Rendering...
-            </>
-          ) : (
-            <>
+        {/* Save / Update buttons */}
+        {isEditing ? (
+          <>
+            {/* Primary: Update */}
+            <button
+              onClick={onUpdate}
+              disabled={isSaving || !soundName.trim()}
+              className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all shadow-lg hover:shadow-purple-500/25"
+            >
+              {isSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Rendering...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Update Sound
+                </>
+              )}
+            </button>
+
+            {/* Secondary: Save as new */}
+            <button
+              onClick={onSave}
+              disabled={isSaving}
+              className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 hover:text-white transition-all"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Save to Library
-            </>
-          )}
-        </button>
+              Save as New Copy
+            </button>
+          </>
+        ) : (
+          /* Creating new */
+          <button
+            onClick={onSave}
+            disabled={isSaving || !soundName.trim()}
+            className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all shadow-lg hover:shadow-purple-500/25"
+          >
+            {isSaving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Rendering...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                Save to Library
+              </>
+            )}
+          </button>
+        )}
 
         {/* Reset */}
         <button
           onClick={onReset}
-          className="w-full py-1.5 text-xs font-medium text-gray-500 hover:text-gray-400 transition-colors"
+          className="w-full py-1.5 text-xs font-medium text-gray-600 hover:text-gray-400 transition-colors"
         >
-          Reset to defaults
+          {isEditing ? 'Discard changes' : 'Reset to defaults'}
         </button>
       </div>
     </div>

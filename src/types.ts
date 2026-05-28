@@ -111,6 +111,19 @@ export interface Page {
   order: number;
 }
 
+export interface ChainItem {
+  id: string;
+  soundId: string;
+  gapBefore: number; // seconds of silence before this sound
+}
+
+export interface Chain {
+  id: string;
+  name: string;
+  items: ChainItem[];
+  createdAt: number;
+}
+
 export type PresetName =
   | 'Kick'
   | 'Snare'

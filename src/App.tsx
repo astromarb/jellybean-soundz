@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import * as Tone from 'tone';
 import { Sound, SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from './types';
 import { useSounds } from './hooks/useSounds';
-import { usePads } from './hooks/usePads';
+import { usePages } from './hooks/usePages';
 import { playAudioBlob } from './lib/audio';
 import * as db from './lib/db';
 
@@ -11,10 +11,29 @@ import SoundLibrary from './components/SoundLibrary';
 import PadGrid from './components/PadGrid';
 import Editor from './components/Editor';
 import WaveformDisplay from './components/WaveformDisplay';
+import MagazinePageNav from './components/MagazinePageNav';
 
 export default function App() {
-  const { sounds, loading, addSound, deleteSound, downloadSound, exportAllSounds } = useSounds();
-  const { pads, assignSound, clearPad, renamePad } = usePads();
+  const { sounds, loading: soundsLoading, addSound, deleteSound, downloadSound, exportAllSounds } = useSounds();
+  const {
+    magazines,
+    pagesInActiveMagazine,
+    activeMagazineId,
+    activePageId,
+    currentPads,
+    loading: pagesLoading,
+    selectMagazine,
+    setActivePageId,
+    addMagazine,
+    renameMagazine,
+    deleteMagazine,
+    addPage,
+    renamePage,
+    deletePage,
+    assignSound,
+    clearPad,
+    renamePad,
+  } = usePages();
 
   const [selectedSound, setSelectedSound] = useState<Sound | null>(null);
   const [synthParams, setSynthParams] = useState<SynthParams>(DEFAULT_SYNTH_PARAMS);
@@ -24,7 +43,8 @@ export default function App() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioPrompt, setAudioPrompt] = useState(true);
 
-  // Enable audio on first interaction
+  const loading = soundsLoading || pagesLoading;
+
   const enableAudio = useCallback(async () => {
     try {
       await Tone.start();
@@ -55,9 +75,7 @@ export default function App() {
 
   const handleDeleteSound = useCallback(async (sound: Sound) => {
     await deleteSound(sound.id);
-    if (selectedSound?.id === sound.id) {
-      setSelectedSound(null);
-    }
+    if (selectedSound?.id === sound.id) setSelectedSound(null);
   }, [deleteSound, selectedSound]);
 
   const handleNewSound = useCallback(() => {
@@ -70,7 +88,6 @@ export default function App() {
   const handleSave = useCallback(async () => {
     if (!soundName.trim() || isSaving) return;
     if (!audioEnabled) await enableAudio();
-
     setIsSaving(true);
     try {
       const saved = await addSound(soundName.trim(), synthParams, effects, 2);
@@ -89,21 +106,6 @@ export default function App() {
     setSoundName('New Sound');
     setSelectedSound(null);
   }, []);
-
-  // Wrappers to enable audio on first pad play
-  const handleAssignSound = useCallback(
-    async (padIndex: number, soundId: string) => {
-      await assignSound(padIndex, soundId);
-    },
-    [assignSound]
-  );
-
-  const handleSelectSoundFromPad = useCallback(
-    (sound: Sound) => {
-      handleSelectSound(sound);
-    },
-    [handleSelectSound]
-  );
 
   if (loading) {
     return (
@@ -136,11 +138,7 @@ export default function App() {
                 <div
                   key={c}
                   className="w-4 h-4 rounded-full animate-bounce"
-                  style={{
-                    backgroundColor: c,
-                    boxShadow: `0 0 10px ${c}`,
-                    animationDelay: `${Math.random() * 0.5}s`,
-                  }}
+                  style={{ backgroundColor: c, boxShadow: `0 0 10px ${c}`, animationDelay: `${Math.random() * 0.5}s` }}
                 />
               ))}
             </div>
@@ -150,6 +148,22 @@ export default function App() {
 
       {/* Header */}
       <Header onExportAll={exportAllSounds} />
+
+      {/* Magazine / Page navigation */}
+      <MagazinePageNav
+        magazines={magazines}
+        pagesInActiveMagazine={pagesInActiveMagazine}
+        activeMagazineId={activeMagazineId}
+        activePageId={activePageId}
+        onSelectMagazine={selectMagazine}
+        onSelectPage={setActivePageId}
+        onAddMagazine={addMagazine}
+        onRenameMagazine={renameMagazine}
+        onDeleteMagazine={deleteMagazine}
+        onAddPage={(magId, name) => addPage(magId, name)}
+        onRenamePage={renamePage}
+        onDeletePage={deletePage}
+      />
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -169,12 +183,12 @@ export default function App() {
         {/* Center: Pad Grid */}
         <div className="flex-1 min-w-0">
           <PadGrid
-            pads={pads}
+            pads={currentPads}
             sounds={sounds}
-            onAssignSound={handleAssignSound}
+            onAssignSound={assignSound}
             onClearPad={clearPad}
             onRenamePad={renamePad}
-            onSelectSound={handleSelectSoundFromPad}
+            onSelectSound={handleSelectSound}
           />
         </div>
 

@@ -3,6 +3,7 @@ import { SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } fro
 import SynthControls from './SynthControls';
 import EffectsPanel from './EffectsPanel';
 import { startLivePreview, stopLivePreview } from '../lib/audio';
+import { randomizeSynthParams, randomizeEffects } from '../lib/randomize';
 
 type EditorTab = 'synth' | 'effects';
 
@@ -50,6 +51,11 @@ export default function Editor({
   const handleStop = () => {
     stopLivePreview();
     setIsPreviewing(false);
+  };
+
+  const handleRandomize = () => {
+    onSynthParamsChange(randomizeSynthParams());
+    onEffectsChange(randomizeEffects());
   };
 
   return (
@@ -101,6 +107,16 @@ export default function Editor({
 
       {/* Action buttons */}
       <div className="px-3 py-3 border-t border-gray-800 space-y-2 shrink-0">
+        {/* Randomize */}
+        <button
+          onClick={handleRandomize}
+          className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 hover:border-gray-500 transition-all"
+          title="Randomize all synth params and effects"
+        >
+          <span className="text-base leading-none">🎲</span>
+          Randomize
+        </button>
+
         {/* Preview / Stop */}
         <div className="flex gap-2">
           <button

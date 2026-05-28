@@ -94,6 +94,23 @@ export interface PadAssignment {
   padName: string;
 }
 
+export interface Magazine {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: number;
+  order: number;
+}
+
+export interface Page {
+  id: string;
+  name: string;
+  magazineId: string;
+  pads: PadAssignment[];
+  createdAt: number;
+  order: number;
+}
+
 export type PresetName =
   | 'Kick'
   | 'Snare'

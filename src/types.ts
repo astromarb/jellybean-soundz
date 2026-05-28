@@ -164,6 +164,39 @@ export const SYNTH_TYPES: SynthType[] = [
   'PluckSynth',
 ];
 
+export type InstrumentType =
+  | 'Piano' | 'Violin' | 'Cello' | 'Choir'
+  | 'Brass' | 'Flute' | 'Lead' | 'Pad' | 'Bass' | 'Arp';
+
+export interface BeatzStep {
+  active: boolean;
+  note: string;       // e.g. 'C4' - defaults to track's defaultNote
+  velocity: number;   // 0-1
+}
+
+export interface BeatzTrack {
+  id: string;
+  name: string;
+  type: 'sound' | 'instrument';
+  soundId?: string;
+  instrument?: InstrumentType;
+  defaultNote: string;
+  steps: BeatzStep[];
+  volume: number;   // dB, -40 to 0
+  muted: boolean;
+  color: string;
+}
+
+export interface BeatzProject {
+  id: string;
+  name: string;
+  bpm: number;        // 60-200
+  bars: number;       // 1-8
+  stepsPerBar: number; // always 16
+  tracks: BeatzTrack[];
+  createdAt: number;
+}
+
 export const NOTE_NAMES = [
   'C1', 'C#1', 'D1', 'D#1', 'E1', 'F1', 'F#1', 'G1', 'G#1', 'A1', 'A#1', 'B1',
   'C2', 'C#2', 'D2', 'D#2', 'E2', 'F2', 'F#2', 'G2', 'G#2', 'A2', 'A#2', 'B2',

@@ -13,8 +13,9 @@ import Editor from './components/Editor';
 import WaveformDisplay from './components/WaveformDisplay';
 import MagazinePageNav from './components/MagazinePageNav';
 import ChainerTab from './components/ChainerTab';
+import JellyBeatz from './components/JellyBeatz';
 
-type MacroTab = 'soundboard' | 'chainer';
+type MacroTab = 'soundboard' | 'chainer' | 'beatz';
 
 export default function App() {
   const {
@@ -214,6 +215,7 @@ export default function App() {
           [
             { id: 'soundboard', label: '🎛  Soundboard' },
             { id: 'chainer', label: '🔗  Sound Chainer' },
+            { id: 'beatz', label: '🎵 JELLYBEATZ' },
           ] as const
         ).map((t) => (
           <button
@@ -303,6 +305,11 @@ export default function App() {
           audioEnabled={audioEnabled}
           enableAudio={enableAudio}
         />
+      )}
+
+      {/* ── JELLYBEATZ tab ── */}
+      {macroTab === 'beatz' && (
+        <JellyBeatz sounds={sounds} audioEnabled={audioEnabled} enableAudio={enableAudio} />
       )}
     </div>
   );

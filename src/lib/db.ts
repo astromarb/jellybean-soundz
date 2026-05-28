@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Sound, Magazine, Page, Chain } from '../types';
+import { Sound, Magazine, Page, Chain, BeatzProject } from '../types';
 
 interface JellybeanDB extends DBSchema {
   sounds: {
@@ -25,13 +25,17 @@ interface JellybeanDB extends DBSchema {
     value: Chain;
     indexes: { 'by-createdAt': number };
   };
+  beatzProjects: {
+    key: string;
+    value: BeatzProject;
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<JellybeanDB>> | null = null;
 
 function getDb(): Promise<IDBPDatabase<JellybeanDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<JellybeanDB>('jellybean-soundz', 3, {
+    dbPromise = openDB<JellybeanDB>('jellybean-soundz', 4, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // --- Fresh install ---
         if (oldVersion === 0) {
@@ -73,6 +77,11 @@ function getDb(): Promise<IDBPDatabase<JellybeanDB>> {
         if (oldVersion < 3) {
           const chainStore = db.createObjectStore('chains', { keyPath: 'id' });
           chainStore.createIndex('by-createdAt', 'createdAt');
+        }
+
+        // --- v4 addition: beatzProjects store ---
+        if (oldVersion < 4) {
+          db.createObjectStore('beatzProjects', { keyPath: 'id' });
         }
       },
     });
@@ -160,4 +169,20 @@ export async function saveChain(chain: Chain): Promise<void> {
 export async function deleteChain(id: string): Promise<void> {
   const db = await getDb();
   await db.delete('chains', id);
+}
+
+// BeatzProjects CRUD
+export async function getAllBeatzProjects(): Promise<BeatzProject[]> {
+  const db = await getDb();
+  return db.getAll('beatzProjects');
+}
+
+export async function saveBeatzProject(project: BeatzProject): Promise<void> {
+  const db = await getDb();
+  await db.put('beatzProjects', project);
+}
+
+export async function deleteBeatzProject(id: string): Promise<void> {
+  const db = await getDb();
+  await db.delete('beatzProjects', id);
 }

@@ -82,7 +82,7 @@ export function useSounds() {
     async function init() {
       const stored = await db.getAllSounds();
       if (stored.length === 0) {
-        // Seed default sounds
+        // Seed default sounds — save metadata only; blobs are rendered lazily on first play
         const seeded: Sound[] = [];
         for (const seed of SEED_SOUNDS) {
           const id = `seed-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -95,16 +95,8 @@ export function useSounds() {
             duration: seed.duration,
             createdAt: Date.now(),
           };
-          try {
-            const blob = await renderSoundToWav(seed.synthParams, seed.effects, seed.duration);
-            await db.saveAudioBlob(id, blob);
-            await db.saveSound(sound);
-            seeded.push(sound);
-          } catch (err) {
-            console.warn('Could not render seed sound:', seed.name, err);
-            await db.saveSound(sound);
-            seeded.push(sound);
-          }
+          await db.saveSound(sound);
+          seeded.push(sound);
         }
         setSounds(seeded);
       } else {

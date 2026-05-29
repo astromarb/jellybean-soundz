@@ -47,6 +47,7 @@ function getDb(): Promise<IDBPDatabase<JellybeanDB>> {
           pageStore.createIndex('by-magazineId', 'magazineId');
           const chainStore = db.createObjectStore('chains', { keyPath: 'id' });
           chainStore.createIndex('by-createdAt', 'createdAt');
+          db.createObjectStore('beatzProjects', { keyPath: 'id' });
           return;
         }
 

@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useLayoutEffect,
 } from 'react';
+import HumModal from './HumModal';
 import * as Tone from 'tone';
 import { Sound, JELLYBEAN_COLORS, InstrumentType, NoteDuration, NOTE_DURATIONS, BeatzTrack } from '../types';
 import { useBeatz } from '../hooks/useBeatz';
@@ -217,6 +218,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   const [showInstrumentPicker, setShowInstrumentPicker] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [stepEditor, setStepEditor] = useState<StepEditorState | null>(null);
+  const [showHumModal, setShowHumModal] = useState(false);
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renamingTrackId, setRenamingTrackId] = useState<string | null>(null);
@@ -646,6 +648,14 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
             </div>
           )}
         </div>
+
+        {/* Hum Melody */}
+        <button
+          onClick={() => setShowHumModal(true)}
+          className="px-3 py-1 text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+        >
+          🎵 Hum Melody
+        </button>
       </div>
 
       {/* ── Grid Area ── */}
@@ -947,6 +957,16 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
           onClose={() => setStepEditor(null)}
           anchorX={stepEditor.x}
           anchorY={stepEditor.y}
+        />
+      )}
+
+      {/* ── Hum Modal ── */}
+      {showHumModal && project && (
+        <HumModal
+          bpm={project.bpm}
+          bars={project.bars}
+          onGenerate={(steps) => beatz.addTrackFromSteps('Lead', steps)}
+          onClose={() => setShowHumModal(false)}
         />
       )}
     </div>

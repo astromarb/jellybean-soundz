@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import * as Tone from 'tone';
 import { Sound, SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from './types';
 import { useSounds } from './hooks/useSounds';
@@ -14,6 +14,7 @@ import WaveformDisplay from './components/WaveformDisplay';
 import MagazinePageNav from './components/MagazinePageNav';
 import ChainerTab from './components/ChainerTab';
 import JellyBeatz from './components/JellyBeatz';
+import RecordModal from './components/RecordModal';
 
 type MacroTab = 'soundboard' | 'chainer' | 'beatz';
 
@@ -26,6 +27,7 @@ export default function App() {
     deleteSound,
     downloadSound,
     exportAllSounds,
+    importSounds,
   } = useSounds();
 
   const {
@@ -61,8 +63,23 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioPrompt, setAudioPrompt] = useState(true);
+  const [showRecord, setShowRecord] = useState(false);
 
   const loading = soundsLoading || pagesLoading;
+
+  // Preload sounds once audio is enabled
+  useEffect(() => {
+    if (!audioEnabled || sounds.length === 0) return;
+    sounds.forEach(sound => {
+      db.getAudioBlob(sound.id).then(existing => {
+        if (!existing) {
+          renderSoundToWav(sound.synthParams, sound.effects, sound.duration)
+            .then(blob => db.saveAudioBlob(sound.id, blob))
+            .catch(() => {});
+        }
+      });
+    });
+  }, [audioEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enableAudio = useCallback(async () => {
     try {
@@ -270,6 +287,8 @@ export default function App() {
                 onDeleteSound={handleDeleteSound}
                 onDownloadSound={downloadSound}
                 onNewSound={handleNewSound}
+                onImportSounds={importSounds}
+                onRecord={() => setShowRecord(true)}
               />
             </div>
 
@@ -319,6 +338,14 @@ export default function App() {
       {/* ── JELLYBEATZ tab ── */}
       {macroTab === 'beatz' && (
         <JellyBeatz sounds={sounds} audioEnabled={audioEnabled} enableAudio={enableAudio} />
+      )}
+
+      {/* ── Record Modal ── */}
+      {showRecord && (
+        <RecordModal
+          onImport={importSounds}
+          onClose={() => setShowRecord(false)}
+        />
       )}
     </div>
   );

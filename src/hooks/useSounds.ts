@@ -5,6 +5,39 @@ import { renderSoundToWav } from '../lib/audio';
 import { downloadBlob } from '../lib/wavEncoder';
 import JSZip from 'jszip';
 
+async function importSingleAudioFile(file: File, colorIndex: number): Promise<Sound | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const ctx = new AudioContext();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    await ctx.close();
+
+    const { audioBufferToWav } = await import('../lib/wavEncoder');
+    const wavBlob = audioBufferToWav(audioBuffer);
+
+    const id = `import-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const name = file.name.replace(/\.[^.]+$/, '');
+    const color = JELLYBEAN_COLORS[colorIndex % JELLYBEAN_COLORS.length];
+
+    const sound: Sound = {
+      id,
+      name,
+      synthParams: { ...DEFAULT_SYNTH_PARAMS },
+      effects: { ...DEFAULT_EFFECTS },
+      color,
+      duration: audioBuffer.duration,
+      createdAt: Date.now(),
+    };
+
+    await db.saveAudioBlob(id, wavBlob);
+    await db.saveSound(sound);
+    return sound;
+  } catch (err) {
+    console.warn('importSingleAudioFile failed:', err);
+    return null;
+  }
+}
+
 // Default seed sounds for first load
 const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: EffectsParams; color: string; duration: number }> = [
   {
@@ -165,6 +198,37 @@ export function useSounds() {
     downloadBlob(blob, `${sound.name.replace(/\s+/g, '_')}.wav`);
   }, []);
 
+  const importSounds = useCallback(async (files: File[]): Promise<Sound[]> => {
+    const newSounds: Sound[] = [];
+
+    for (const file of files) {
+      try {
+        if (file.name.toLowerCase().endsWith('.zip')) {
+          const zip = await JSZip.loadAsync(file);
+          for (const [name, entry] of Object.entries(zip.files)) {
+            if (entry.dir) continue;
+            const ext = name.split('.').pop()?.toLowerCase() ?? '';
+            if (!['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'webm'].includes(ext)) continue;
+            const blob = await entry.async('blob');
+            const audioFile = new File([blob], name, { type: `audio/${ext}` });
+            const sound = await importSingleAudioFile(audioFile, sounds.length + newSounds.length);
+            if (sound) newSounds.push(sound);
+          }
+        } else {
+          const sound = await importSingleAudioFile(file, sounds.length + newSounds.length);
+          if (sound) newSounds.push(sound);
+        }
+      } catch (err) {
+        console.warn('Failed to import:', file.name, err);
+      }
+    }
+
+    if (newSounds.length > 0) {
+      setSounds(prev => [...prev, ...newSounds]);
+    }
+    return newSounds;
+  }, [sounds.length]);
+
   const exportAllSounds = useCallback(async (): Promise<void> => {
     if (sounds.length === 0) return;
     const zip = new JSZip();
@@ -187,5 +251,6 @@ export function useSounds() {
     deleteSound,
     downloadSound,
     exportAllSounds,
+    importSounds,
   };
 }

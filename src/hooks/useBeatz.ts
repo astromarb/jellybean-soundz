@@ -233,6 +233,33 @@ export function useBeatz(sounds: Sound[]) {
     }));
   }, [mutateActive]);
 
+  const addTrackFromSteps = useCallback((
+    instrument: InstrumentType,
+    steps: { note: string; active: boolean }[]
+  ) => {
+    mutateActive(p => {
+      const total = p.bars * p.stepsPerBar;
+      const idx = p.tracks.length % JELLYBEAN_COLORS.length;
+      const track: BeatzTrack = {
+        id: uid('bt'),
+        name: `Hum ${new Date().toLocaleTimeString()}`,
+        type: 'instrument',
+        instrument,
+        defaultNote: 'C4',
+        stepDuration: '16n',
+        steps: steps.slice(0, total).map(s => ({
+          active: s.active,
+          note: s.note,
+          velocity: 1,
+        })),
+        volume: -8,
+        muted: false,
+        color: JELLYBEAN_COLORS[idx],
+      };
+      return { ...p, tracks: [...p.tracks, track] };
+    });
+  }, [mutateActive]);
+
   const fillTrack = useCallback((trackId: string, pattern: 'all' | 'everyOther' | 'every4') => {
     mutateActive(p => ({
       ...p,
@@ -251,7 +278,7 @@ export function useBeatz(sounds: Sound[]) {
     projects, activeProject, activeProjectId, loading,
     setActiveProjectId, addProject, renameProject, deleteProject,
     setBpm, setBars,
-    addSoundTrack, addInstrumentTrack, removeTrack,
+    addSoundTrack, addInstrumentTrack, addTrackFromSteps, removeTrack,
     setTrackVolume, toggleMute, setTrackDefaultNote, renameTrack, setTrackColor,
     toggleStep, setStepNote, setStepDuration, clearTrack, fillTrack,
     setTrackStepDuration,

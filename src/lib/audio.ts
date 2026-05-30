@@ -210,6 +210,45 @@ export async function startLivePreview(
   }
 }
 
+// Play a sound directly via real-time synthesis (no Tone.Offline required).
+// Used when no pre-rendered blob is available yet.
+export async function playDirect(
+  synthParams: SynthParams,
+  effects: EffectsParams,
+  duration: number = 2
+): Promise<void> {
+  await Tone.start();
+  const synth = createSynth(synthParams);
+  const chain = buildEffectsChain(effects);
+
+  if (chain.length > 0) {
+    synth.connect(chain[0]);
+    for (let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i + 1]);
+    chain[chain.length - 1].toDestination();
+  } else {
+    synth.toDestination();
+  }
+
+  const noteDuration = Math.min(duration * 0.8, 1.5);
+  const isNoise = synthParams.synthType === 'NoiseSynth';
+  const isMetal = synthParams.synthType === 'MetalSynth';
+
+  if (isNoise) {
+    (synth as Tone.NoiseSynth).triggerAttackRelease(noteDuration);
+  } else if (isMetal) {
+    (synth as Tone.MetalSynth).triggerAttackRelease(synthParams.note, noteDuration);
+  } else {
+    (synth as Tone.Synth).triggerAttackRelease(synthParams.note, noteDuration);
+  }
+
+  // Dispose after playback + release tail
+  const disposalDelay = (duration + (synthParams.envelope?.release ?? 0.5) + 0.5) * 1000;
+  setTimeout(() => {
+    try { synth.dispose(); } catch (_) {}
+    chain.forEach(n => { try { n.dispose(); } catch (_) {} });
+  }, disposalDelay);
+}
+
 // Offline render → WAV blob
 export async function renderSoundToWav(
   synthParams: SynthParams,

@@ -3,7 +3,7 @@ import * as Tone from 'tone';
 import { Sound, SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from './types';
 import { useSounds } from './hooks/useSounds';
 import { usePages } from './hooks/usePages';
-import { playAudioBlob, renderSoundToWav } from './lib/audio';
+import { playAudioBlob, playDirect, renderSoundToWav } from './lib/audio';
 import * as db from './lib/db';
 
 import Header from './components/Header';
@@ -88,12 +88,17 @@ export default function App() {
       if (!audioEnabled) await enableAudio();
       setSelectedSound(sound);
       try {
-        let blob = await db.getAudioBlob(sound.id);
-        if (!blob) {
-          blob = await renderSoundToWav(sound.synthParams, sound.effects, sound.duration);
-          await db.saveAudioBlob(sound.id, blob);
+        const blob = await db.getAudioBlob(sound.id);
+        if (blob) {
+          await playAudioBlob(blob);
+        } else {
+          // Play immediately via real-time synthesis — no Tone.Offline required
+          await playDirect(sound.synthParams, sound.effects, sound.duration);
+          // Render and cache in background so the next play uses the blob
+          renderSoundToWav(sound.synthParams, sound.effects, sound.duration)
+            .then(b => db.saveAudioBlob(sound.id, b))
+            .catch(() => {});
         }
-        await playAudioBlob(blob);
       } catch (err) {
         console.error('Error playing sound:', err);
       }

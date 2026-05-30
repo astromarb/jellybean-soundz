@@ -168,10 +168,22 @@ export type InstrumentType =
   | 'Piano' | 'Violin' | 'Cello' | 'Choir'
   | 'Brass' | 'Flute' | 'Lead' | 'Pad' | 'Bass' | 'Arp';
 
+export type NoteDuration = '1n' | '2n' | '4n' | '8n' | '16n' | '32n';
+
+export const NOTE_DURATIONS: { value: NoteDuration; label: string; short: string }[] = [
+  { value: '1n',  label: 'Whole',   short: '1/1'  },
+  { value: '2n',  label: 'Half',    short: '1/2'  },
+  { value: '4n',  label: 'Quarter', short: '1/4'  },
+  { value: '8n',  label: 'Eighth',  short: '1/8'  },
+  { value: '16n', label: '16th',    short: '1/16' },
+  { value: '32n', label: '32nd',    short: '1/32' },
+];
+
 export interface BeatzStep {
   active: boolean;
   note: string;       // e.g. 'C4' - defaults to track's defaultNote
   velocity: number;   // 0-1
+  duration?: NoteDuration; // optional per-step override; falls back to track.stepDuration
 }
 
 export interface BeatzTrack {
@@ -181,6 +193,7 @@ export interface BeatzTrack {
   soundId?: string;
   instrument?: InstrumentType;
   defaultNote: string;
+  stepDuration: NoteDuration; // default note-hold duration for all steps on this track
   steps: BeatzStep[];
   volume: number;   // dB, -40 to 0
   muted: boolean;

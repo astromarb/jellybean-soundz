@@ -137,11 +137,17 @@ export async function startBeatz(
       synth.connect(channel);
       activeSynths.push(synth as Tone.PolySynth | Tone.Synth);
 
-      // Build the steps array for Tone.Sequence (null for inactive, note string for active)
-      const stepsArr = track.steps.slice(0, totalSteps).map(s => s.active ? (s.note || track.defaultNote) : null);
+      // Build the steps array for Tone.Sequence — each active step carries note + duration
+      const stepsArr = track.steps.slice(0, totalSteps).map(s =>
+        s.active ? { note: s.note || track.defaultNote, dur: s.duration || track.stepDuration || '16n' } : null
+      );
 
       const seq = new Tone.Sequence(
-        (time, note) => { if (note) (synth as Tone.PolySynth).triggerAttackRelease(note, '16n', time); },
+        (time, val) => {
+          if (!val) return;
+          const { note, dur } = val as { note: string; dur: string };
+          (synth as Tone.PolySynth).triggerAttackRelease(note, dur, time);
+        },
         stepsArr,
         '16n'
       );
@@ -245,7 +251,7 @@ async function renderInstrumentTrack(
     Tone.getTransport().bpm.value = project.bpm;
 
     const totalSteps = project.bars * project.stepsPerBar;
-    const events: [string, string][] = [];
+    const events: [string, { note: string; dur: string }][] = [];
 
     track.steps.slice(0, totalSteps).forEach((step, i) => {
       if (!step.active) return;
@@ -253,13 +259,17 @@ async function renderInstrumentTrack(
       const stepInBar = i % project.stepsPerBar;
       const beat = Math.floor(stepInBar / 4);
       const sixteenth = stepInBar % 4;
-      events.push([`${bar}:${beat}:${sixteenth}`, step.note || track.defaultNote]);
+      events.push([`${bar}:${beat}:${sixteenth}`, {
+        note: step.note || track.defaultNote,
+        dur: step.duration || track.stepDuration || '16n',
+      }]);
     });
 
     if (events.length === 0) return;
 
-    const part = new Tone.Part((time, note) => {
-      (synth as Tone.PolySynth).triggerAttackRelease(note as string, '16n', time);
+    const part = new Tone.Part((time, val) => {
+      const { note, dur } = val as { note: string; dur: string };
+      (synth as Tone.PolySynth).triggerAttackRelease(note, dur, time);
     }, events);
     part.start(0);
     Tone.getTransport().start();

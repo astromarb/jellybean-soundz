@@ -6,7 +6,7 @@ import React, {
   useLayoutEffect,
 } from 'react';
 import * as Tone from 'tone';
-import { Sound, JELLYBEAN_COLORS, InstrumentType, BeatzTrack } from '../types';
+import { Sound, JELLYBEAN_COLORS, InstrumentType, NoteDuration, NOTE_DURATIONS, BeatzTrack } from '../types';
 import { useBeatz } from '../hooks/useBeatz';
 import {
   startBeatz,
@@ -33,10 +33,11 @@ interface ContextMenu {
   y: number;
 }
 
-interface NoteSelectorState {
+interface StepEditorState {
   trackId: string;
   stepIndex: number;
   currentNote: string;
+  currentDuration: NoteDuration;
   x: number;
   y: number;
 }
@@ -69,33 +70,34 @@ const ALL_NOTES = buildNoteList();
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function NoteSelector({
+function StepEditor({
   currentNote,
-  onSelect,
+  currentDuration,
+  onSelectNote,
+  onSelectDuration,
   onClose,
   anchorX,
   anchorY,
 }: {
   currentNote: string;
-  onSelect: (note: string) => void;
+  currentDuration: NoteDuration;
+  onSelectNote: (note: string) => void;
+  onSelectDuration: (d: NoteDuration) => void;
   onClose: () => void;
   anchorX: number;
   anchorY: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<'note' | 'duration'>('note');
 
-  // close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose();
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [onClose]);
 
-  // Clamp position so popup doesn't go off-screen
   const [pos, setPos] = useState({ left: anchorX, top: anchorY });
   useLayoutEffect(() => {
     if (!ref.current) return;
@@ -114,38 +116,86 @@ function NoteSelector({
   return (
     <div
       ref={ref}
-      className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl p-3 select-none"
-      style={{ left: pos.left, top: pos.top, minWidth: 260 }}
+      className="fixed z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl select-none"
+      style={{ left: pos.left, top: pos.top, minWidth: 280 }}
     >
-      <div className="text-xs text-gray-400 mb-2 font-mono">Select note</div>
-      <div className="space-y-1">
-        {OCTAVES.map(oct => (
-          <div key={oct} className="flex gap-1">
-            <div className="w-6 text-xs text-gray-500 font-mono self-center">{oct}</div>
-            {NOTES_IN_OCTAVE.map(n => {
-              const note = `${n}${oct}`;
-              const isSharp = n.includes('#');
-              const isSelected = note === currentNote;
-              return (
-                <button
-                  key={note}
-                  onClick={() => { onSelect(note); onClose(); }}
-                  className={`
-                    text-xs font-mono rounded transition-all
-                    ${isSharp
-                      ? 'bg-gray-800 text-gray-300 w-7 h-6 text-[9px]'
-                      : 'bg-gray-700 text-white w-7 h-6'}
-                    ${isSelected ? 'ring-2 ring-violet-400' : 'hover:brightness-125'}
-                  `}
-                  style={isSelected ? { backgroundColor: '#7700FF', color: '#fff' } : undefined}
-                >
-                  {n}
-                </button>
-              );
-            })}
-          </div>
-        ))}
+      {/* Tabs */}
+      <div className="flex border-b border-gray-700">
+        <button
+          onClick={() => setTab('note')}
+          className={`flex-1 py-1.5 text-xs font-semibold uppercase tracking-widest transition-colors ${tab === 'note' ? 'text-violet-400 border-b-2 border-violet-500' : 'text-gray-500 hover:text-gray-300'}`}
+        >
+          Note — {currentNote}
+        </button>
+        <button
+          onClick={() => setTab('duration')}
+          className={`flex-1 py-1.5 text-xs font-semibold uppercase tracking-widest transition-colors ${tab === 'duration' ? 'text-violet-400 border-b-2 border-violet-500' : 'text-gray-500 hover:text-gray-300'}`}
+        >
+          Duration — {NOTE_DURATIONS.find(d => d.value === currentDuration)?.short ?? currentDuration}
+        </button>
       </div>
+
+      {tab === 'note' && (
+        <div className="p-3 space-y-1">
+          {OCTAVES.map(oct => (
+            <div key={oct} className="flex gap-1">
+              <div className="w-6 text-xs text-gray-500 font-mono self-center">{oct}</div>
+              {NOTES_IN_OCTAVE.map(n => {
+                const note = `${n}${oct}`;
+                const isSharp = n.includes('#');
+                const isSelected = note === currentNote;
+                return (
+                  <button
+                    key={note}
+                    onClick={() => { onSelectNote(note); onClose(); }}
+                    className={`text-xs font-mono rounded transition-all w-7 h-6 ${isSharp ? 'bg-gray-800 text-gray-300 text-[9px]' : 'bg-gray-700 text-white'} ${isSelected ? 'ring-2 ring-violet-400' : 'hover:brightness-125'}`}
+                    style={isSelected ? { backgroundColor: '#7700FF', color: '#fff' } : undefined}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'duration' && (
+        <div className="p-3">
+          <div className="grid grid-cols-3 gap-2">
+            {NOTE_DURATIONS.map(d => (
+              <button
+                key={d.value}
+                onClick={() => { onSelectDuration(d.value); onClose(); }}
+                className={`flex flex-col items-center py-3 rounded-lg border transition-all ${
+                  d.value === currentDuration
+                    ? 'bg-violet-600 border-violet-400 text-white'
+                    : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-gray-500'
+                }`}
+              >
+                <DurationIcon value={d.value} />
+                <span className="text-xs font-mono mt-1">{d.short}</span>
+                <span className="text-[10px] text-gray-400">{d.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DurationIcon({ value }: { value: NoteDuration }) {
+  const filled = { '1n': 1, '2n': 2, '4n': 4, '8n': 8, '16n': 16, '32n': 32 }[value] ?? 16;
+  const boxes = Math.min(8, Math.round(16 / filled));
+  return (
+    <div className="flex gap-0.5 h-3 items-center">
+      {Array.from({ length: 8 }, (_, i) => (
+        <div
+          key={i}
+          className={`h-full rounded-sm ${i < boxes ? 'bg-current w-2' : 'bg-gray-700 w-1'}`}
+        />
+      ))}
     </div>
   );
 }
@@ -166,7 +216,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   const [showSoundPicker, setShowSoundPicker] = useState(false);
   const [showInstrumentPicker, setShowInstrumentPicker] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
-  const [noteSelector, setNoteSelector] = useState<NoteSelectorState | null>(null);
+  const [stepEditor, setStepEditor] = useState<StepEditorState | null>(null);
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renamingTrackId, setRenamingTrackId] = useState<string | null>(null);
@@ -321,10 +371,11 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     e.preventDefault();
     if (track.type !== 'instrument') return;
     const step = track.steps[stepIndex];
-    setNoteSelector({
+    setStepEditor({
       trackId: track.id,
       stepIndex,
       currentNote: step.note || track.defaultNote,
+      currentDuration: step.duration || track.stepDuration || '16n',
       x: e.clientX,
       y: e.clientY,
     });
@@ -739,6 +790,21 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         </select>
                       </div>
                     )}
+
+                    {/* Step duration (all track types) */}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[9px] text-gray-500 font-mono w-4">Dur</span>
+                      <select
+                        value={track.stepDuration ?? '16n'}
+                        onChange={e => beatz.setTrackStepDuration(track.id, e.target.value as NoteDuration)}
+                        className="flex-1 text-[9px] bg-gray-800 border border-gray-700 text-gray-300 rounded px-0.5 py-0.5 font-mono cursor-pointer"
+                        title="Default note duration for all steps on this track"
+                      >
+                        {NOTE_DURATIONS.map(d => (
+                          <option key={d.value} value={d.value}>{d.short} {d.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   {/* Step buttons */}
@@ -756,6 +822,9 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                               const step = track.steps[stepIdx];
                               const isActive = step?.active ?? false;
                               const isCurrent = isPlaying && stepIdx === currentStep;
+                              const effectiveDur = step?.duration || track.stepDuration || '16n';
+                              const isNonDefaultDur = isActive && effectiveDur !== '16n';
+                              const durShort = NOTE_DURATIONS.find(d => d.value === effectiveDur)?.short;
                               const noteDisplay = track.type === 'instrument' && isActive
                                 ? (step.note || track.defaultNote).replace(/\d/, '')
                                 : null;
@@ -782,16 +851,27 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                   }}
                                   title={
                                     track.type === 'instrument'
-                                      ? `Step ${stepIdx + 1}: ${step?.note || track.defaultNote} (right-click to change note)`
-                                      : `Step ${stepIdx + 1}`
+                                      ? `Step ${stepIdx + 1}: ${step?.note || track.defaultNote} / ${durShort} (right-click to edit)`
+                                      : `Step ${stepIdx + 1}${isNonDefaultDur ? ` / ${durShort}` : ''}`
                                   }
                                 >
-                                  {noteDisplay && (
+                                  {/* Note name label */}
+                                  {noteDisplay && !isNonDefaultDur && (
                                     <span
                                       className="absolute inset-0 flex items-center justify-center text-[8px] font-bold pointer-events-none"
                                       style={{ color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
                                     >
                                       {noteDisplay}
+                                    </span>
+                                  )}
+                                  {/* Duration badge (shown when non-default, overrides note label) */}
+                                  {isNonDefaultDur && (
+                                    <span
+                                      className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none leading-none gap-px"
+                                      style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
+                                    >
+                                      {noteDisplay && <span className="text-[7px] font-bold">{noteDisplay}</span>}
+                                      <span className="text-[6px] font-bold opacity-80">{durShort}</span>
                                     </span>
                                   )}
                                 </button>
@@ -857,14 +937,16 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
         </div>
       )}
 
-      {/* ── Note Selector ── */}
-      {noteSelector && (
-        <NoteSelector
-          currentNote={noteSelector.currentNote}
-          onSelect={(note) => beatz.setStepNote(noteSelector.trackId, noteSelector.stepIndex, note)}
-          onClose={() => setNoteSelector(null)}
-          anchorX={noteSelector.x}
-          anchorY={noteSelector.y}
+      {/* ── Step Editor (note + duration) ── */}
+      {stepEditor && (
+        <StepEditor
+          currentNote={stepEditor.currentNote}
+          currentDuration={stepEditor.currentDuration}
+          onSelectNote={(note) => beatz.setStepNote(stepEditor.trackId, stepEditor.stepIndex, note)}
+          onSelectDuration={(d) => beatz.setStepDuration(stepEditor.trackId, stepEditor.stepIndex, d)}
+          onClose={() => setStepEditor(null)}
+          anchorX={stepEditor.x}
+          anchorY={stepEditor.y}
         />
       )}
     </div>

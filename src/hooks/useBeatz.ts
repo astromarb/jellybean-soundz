@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { BeatzProject, BeatzTrack, BeatzStep, InstrumentType, Sound, JELLYBEAN_COLORS } from '../types';
+import { BeatzProject, BeatzTrack, BeatzStep, InstrumentType, NoteDuration, Sound, JELLYBEAN_COLORS } from '../types';
 import * as db from '../lib/db';
 
 const DEFAULT_STEPS_PER_BAR = 16;
@@ -35,6 +35,7 @@ export function useBeatz(sounds: Sound[]) {
             type: 'sound',
             soundId: sound.id,
             defaultNote: 'C4',
+            stepDuration: '16n',
             steps: makeSteps(totalSteps),
             volume: -6,
             muted: false,
@@ -143,7 +144,7 @@ export function useBeatz(sounds: Sound[]) {
       const idx = p.tracks.length % JELLYBEAN_COLORS.length;
       const track: BeatzTrack = {
         id: uid('bt'), name: sound.name, type: 'sound', soundId,
-        defaultNote: 'C4', steps: makeSteps(total), volume: -6,
+        defaultNote: 'C4', stepDuration: '16n', steps: makeSteps(total), volume: -6,
         muted: false, color: sound.color || JELLYBEAN_COLORS[idx],
       };
       return { ...p, tracks: [...p.tracks, track] };
@@ -156,7 +157,7 @@ export function useBeatz(sounds: Sound[]) {
       const idx = p.tracks.length % JELLYBEAN_COLORS.length;
       const track: BeatzTrack = {
         id: uid('bt'), name: instrument, type: 'instrument', instrument,
-        defaultNote: 'C4', steps: makeSteps(total), volume: -8,
+        defaultNote: 'C4', stepDuration: '16n', steps: makeSteps(total), volume: -8,
         muted: false, color: JELLYBEAN_COLORS[idx],
       };
       return { ...p, tracks: [...p.tracks, track] };
@@ -210,6 +211,21 @@ export function useBeatz(sounds: Sound[]) {
     }));
   }, [mutateActive]);
 
+  const setTrackStepDuration = useCallback((trackId: string, stepDuration: NoteDuration) => {
+    mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, stepDuration } : t) }));
+  }, [mutateActive]);
+
+  const setStepDuration = useCallback((trackId: string, stepIndex: number, duration: NoteDuration) => {
+    mutateActive(p => ({
+      ...p,
+      tracks: p.tracks.map(t => {
+        if (t.id !== trackId) return t;
+        const steps = t.steps.map((s, i) => i !== stepIndex ? s : { ...s, duration, active: true });
+        return { ...t, steps };
+      }),
+    }));
+  }, [mutateActive]);
+
   const clearTrack = useCallback((trackId: string) => {
     mutateActive(p => ({
       ...p,
@@ -237,6 +253,7 @@ export function useBeatz(sounds: Sound[]) {
     setBpm, setBars,
     addSoundTrack, addInstrumentTrack, removeTrack,
     setTrackVolume, toggleMute, setTrackDefaultNote, renameTrack, setTrackColor,
-    toggleStep, setStepNote, clearTrack, fillTrack,
+    toggleStep, setStepNote, setStepDuration, clearTrack, fillTrack,
+    setTrackStepDuration,
   };
 }

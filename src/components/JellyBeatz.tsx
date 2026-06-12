@@ -58,6 +58,20 @@ const INSTRUMENTS: InstrumentType[] = [
 
 const SIDEBAR_W = 264;
 
+// Width (px) of one 16th-note step cell — drives the horizontal zoom level
+const STEP_W_MIN = 8;
+const STEP_W_MAX = 52;
+const STEP_W_DEFAULT = 20;
+
+// Compute the pixel width of one bar at a given step cell size
+function barPixelWidth(stepW: number, stepsPerBar: number): number {
+  const beatsPerBar = stepsPerBar / 4;
+  // beat group = 4 steps + 3 inner gaps (gap-0.5 = 2px) + 2px left+right padding
+  const beatGroupW = 4 * stepW + 3 * 2 + 4;
+  // bar = N beat groups + (N-1) gaps between groups (gap-0.5 = 2px)
+  return beatsPerBar * beatGroupW + (beatsPerBar - 1) * 2;
+}
+
 const NOTES_IN_OCTAVE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const OCTAVES = [2, 3, 4, 5];
 
@@ -235,6 +249,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   const [bpmInput, setBpmInput] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [showNewProjectInput, setShowNewProjectInput] = useState(false);
+  const [stepW, setStepW] = useState(STEP_W_DEFAULT);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const soundPickerRef = useRef<HTMLDivElement>(null);
@@ -706,6 +721,36 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
         >
           ✨ Demo Song
         </button>
+
+        {/* Zoom / step-width control */}
+        <div className="ml-auto flex items-center gap-1.5 pl-2 border-l border-gray-700">
+          <span className="text-[10px] text-gray-500 font-mono">Zoom</span>
+          <button
+            onClick={() => setStepW(w => Math.max(STEP_W_MIN, w - 4))}
+            className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded transition-colors"
+            title="Zoom out"
+          >−</button>
+          <input
+            type="range"
+            min={STEP_W_MIN}
+            max={STEP_W_MAX}
+            step={2}
+            value={stepW}
+            onChange={e => setStepW(parseInt(e.target.value, 10))}
+            className="w-20 h-1.5 accent-violet-500 cursor-pointer"
+            title={`Step width: ${stepW}px`}
+          />
+          <button
+            onClick={() => setStepW(w => Math.min(STEP_W_MAX, w + 4))}
+            className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded transition-colors"
+            title="Zoom in"
+          >+</button>
+          <button
+            onClick={() => setStepW(STEP_W_DEFAULT)}
+            className="text-[9px] text-gray-500 hover:text-gray-300 font-mono transition-colors"
+            title="Reset zoom"
+          >reset</button>
+        </div>
       </div>
 
       {/* ── Grid Area ── */}
@@ -743,7 +788,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                   <div
                     key={bar}
                     className="flex gap-0.5"
-                    style={{ width: project.stepsPerBar * 28 + (project.stepsPerBar / 4 - 1) * 2 }}
+                    style={{ width: barPixelWidth(stepW, project.stepsPerBar) }}
                   >
                     <div className="px-1 py-1 text-[10px] text-gray-500 font-mono w-full text-center">
                       Bar {bar + 1}
@@ -973,8 +1018,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                     ${isCurrent ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-950' : ''}
                                   `}
                                   style={{
-                                    width: 26,
-                                    height: 26,
+                                    width: stepW,
+                                    height: Math.max(18, stepW),
                                     backgroundColor: isActive ? track.color : undefined,
                                     boxShadow: isActive
                                       ? `0 0 8px ${track.color}88, 0 0 3px ${track.color}`
@@ -986,8 +1031,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                       : `Step ${stepIdx + 1}${isNonDefaultDur ? ` / ${durShort}` : ''}`
                                   }
                                 >
-                                  {/* Note name label */}
-                                  {noteDisplay && !isNonDefaultDur && (
+                                  {/* Note name label — only shown when cells are wide enough */}
+                                  {stepW >= 18 && noteDisplay && !isNonDefaultDur && (
                                     <span
                                       className="absolute inset-0 flex items-center justify-center text-[8px] font-bold pointer-events-none"
                                       style={{ color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
@@ -995,8 +1040,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                       {noteDisplay}
                                     </span>
                                   )}
-                                  {/* Duration badge (shown when non-default, overrides note label) */}
-                                  {isNonDefaultDur && (
+                                  {/* Duration badge */}
+                                  {stepW >= 18 && isNonDefaultDur && (
                                     <span
                                       className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none leading-none gap-px"
                                       style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
@@ -1012,7 +1057,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         ))}
                         {/* Bar separator */}
                         {bar < project.bars - 1 && (
-                          <div className="w-px h-6 bg-gray-600 mx-1 self-center" />
+                          <div className="w-px bg-gray-600 mx-1 self-center" style={{ height: Math.max(18, stepW) }} />
                         )}
                       </React.Fragment>
                     ))}

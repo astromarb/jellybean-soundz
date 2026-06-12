@@ -6,12 +6,15 @@ import React, {
   useLayoutEffect,
 } from 'react';
 import HumModal from './HumModal';
+import PianoRoll from './PianoRoll';
 import * as Tone from 'tone';
 import { Sound, JELLYBEAN_COLORS, InstrumentType, NoteDuration, NOTE_DURATIONS, BeatzTrack } from '../types';
 import { useBeatz } from '../hooks/useBeatz';
 import {
   startBeatz,
   stopBeatz,
+  pauseBeatz,
+  resumeBeatz,
   exportBeatz,
   INSTRUMENT_EMOJI,
   INSTRUMENT_LABEL,
@@ -48,9 +51,12 @@ interface StepEditorState {
 // ---------------------------------------------------------------------------
 
 const INSTRUMENTS: InstrumentType[] = [
-  'Piano', 'Violin', 'Cello', 'Choir',
+  'Piano', 'Pluck', 'Strings', 'Violin', 'Cello', 'Choir',
   'Brass', 'Flute', 'Lead', 'Pad', 'Bass', 'Arp',
+  'Kick', 'Snare', 'HiHat',
 ];
+
+const SIDEBAR_W = 264;
 
 const NOTES_IN_OCTAVE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const OCTAVES = [2, 3, 4, 5];
@@ -210,6 +216,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
 
   // Playback
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -219,6 +226,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [stepEditor, setStepEditor] = useState<StepEditorState | null>(null);
   const [showHumModal, setShowHumModal] = useState(false);
+  const [pianoRollTrackId, setPianoRollTrackId] = useState<string | null>(null);
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renamingTrackId, setRenamingTrackId] = useState<string | null>(null);
@@ -246,6 +254,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     if (isPlaying) {
       stopBeatz();
       setIsPlaying(false);
+      setIsPaused(false);
       setCurrentStep(-1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,21 +282,34 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     return () => document.removeEventListener('mousedown', handle);
   }, [contextMenu]);
 
-  // ── Play / Stop ──
-  const handlePlayStop = useCallback(async () => {
+  // ── Transport ──
+  const handlePlay = useCallback(async () => {
     if (!audioEnabled) await enableAudio();
-    if (isPlaying) {
-      stopBeatz();
-      setIsPlaying(false);
-      setCurrentStep(-1);
-    } else if (project) {
+    if (isPlaying && isPaused) {
+      resumeBeatz();
+      setIsPaused(false);
+    } else if (!isPlaying && project) {
       await Tone.start();
       await startBeatz(project, sounds, (step) => {
         setCurrentStep(step);
       });
       setIsPlaying(true);
+      setIsPaused(false);
     }
-  }, [isPlaying, project, sounds, audioEnabled, enableAudio]);
+  }, [isPlaying, isPaused, project, sounds, audioEnabled, enableAudio]);
+
+  const handlePause = useCallback(() => {
+    if (!isPlaying || isPaused) return;
+    pauseBeatz();
+    setIsPaused(true);
+  }, [isPlaying, isPaused]);
+
+  const handleStop = useCallback(() => {
+    stopBeatz();
+    setIsPlaying(false);
+    setIsPaused(false);
+    setCurrentStep(-1);
+  }, []);
 
   // ── Export ──
   const handleExport = useCallback(async () => {
@@ -549,7 +571,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
             onChange={e => beatz.setBars(parseInt(e.target.value, 10))}
             className="bg-gray-800 border border-gray-700 text-white text-sm rounded px-1 py-1 font-mono cursor-pointer"
           >
-            {[1, 2, 4, 8].map(b => (
+            {[1, 2, 4, 8, 16, 32].map(b => (
               <option key={b} value={b}>{b}</option>
             ))}
           </select>
@@ -561,18 +583,37 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
         <span className="text-xs text-gray-500 font-mono">{calcDuration()}</span>
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Play/Stop */}
-          <button
-            onClick={handlePlayStop}
-            className={`
-              px-4 py-1.5 rounded-lg text-sm font-bold transition-all
-              ${isPlaying
-                ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/40'
-                : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/40'}
-            `}
-          >
-            {isPlaying ? '⏹ Stop' : '▶ Play'}
-          </button>
+          {/* Transport: Play / Pause / Stop */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handlePlay}
+              disabled={isPlaying && !isPaused}
+              className={`
+                px-4 py-1.5 rounded-lg text-sm font-bold transition-all
+                ${isPlaying && !isPaused
+                  ? 'bg-gray-700 text-gray-400 cursor-default'
+                  : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/40'}
+              `}
+            >
+              ▶ {isPaused ? 'Resume' : 'Play'}
+            </button>
+            <button
+              onClick={handlePause}
+              disabled={!isPlaying || isPaused}
+              className="px-3 py-1.5 rounded-lg text-sm font-bold bg-gray-700 hover:bg-gray-600 text-white transition-colors disabled:opacity-40"
+              title="Pause"
+            >
+              ⏸
+            </button>
+            <button
+              onClick={handleStop}
+              disabled={!isPlaying}
+              className="px-3 py-1.5 rounded-lg text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-40 disabled:bg-gray-700"
+              title="Stop"
+            >
+              ⏹
+            </button>
+          </div>
 
           {/* Export */}
           <button
@@ -656,6 +697,15 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
         >
           🎵 Hum Melody
         </button>
+
+        {/* Demo song */}
+        <button
+          onClick={() => beatz.loadDemoSong()}
+          title="Load the 32-bar showcase composition as a new project"
+          className="px-3 py-1 text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+        >
+          ✨ Demo Song
+        </button>
       </div>
 
       {/* ── Grid Area ── */}
@@ -687,7 +737,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
             {/* Bar labels */}
             <div className="flex sticky top-0 z-10 bg-gray-950/95 backdrop-blur-sm border-b border-gray-800">
               {/* sidebar spacer */}
-              <div className="shrink-0" style={{ width: 240 }} />
+              <div className="shrink-0" style={{ width: SIDEBAR_W }} />
               <div className="flex">
                 {Array.from({ length: project.bars }, (_, bar) => (
                   <div
@@ -714,7 +764,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                   {/* Track Sidebar */}
                   <div
                     className="shrink-0 flex flex-col justify-between px-2 py-1.5 border-r border-gray-800 cursor-context-menu"
-                    style={{ width: 240 }}
+                    style={{ width: SIDEBAR_W }}
                     onContextMenu={e => openContextMenu(e, track.id)}
                   >
                     <div className="flex items-center gap-1.5">
@@ -755,6 +805,17 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         </span>
                       )}
 
+                      {/* Piano roll (instrument tracks) */}
+                      {track.type === 'instrument' && (
+                        <button
+                          onClick={() => setPianoRollTrackId(track.id)}
+                          className="shrink-0 w-5 h-5 rounded text-[10px] transition-all border bg-gray-800 border-gray-600 text-gray-400 hover:text-white hover:border-violet-500"
+                          title="Open piano roll"
+                        >
+                          🎹
+                        </button>
+                      )}
+
                       {/* Mute button */}
                       <button
                         onClick={() => beatz.toggleMute(track.id)}
@@ -767,6 +828,20 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         title={track.muted ? 'Unmute' : 'Mute'}
                       >
                         M
+                      </button>
+
+                      {/* Solo button */}
+                      <button
+                        onClick={() => beatz.toggleSolo(track.id)}
+                        className={`
+                          shrink-0 w-5 h-5 rounded text-[9px] font-bold transition-all border
+                          ${track.solo
+                            ? 'bg-yellow-500 border-yellow-400 text-gray-900'
+                            : 'bg-gray-800 border-gray-600 text-gray-400 hover:text-white'}
+                        `}
+                        title={track.solo ? 'Unsolo' : 'Solo'}
+                      >
+                        S
                       </button>
                     </div>
 
@@ -783,6 +858,51 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         className="flex-1 h-1.5 accent-violet-500 cursor-pointer"
                       />
                       <span className="text-[9px] text-gray-500 font-mono w-7 text-right">{track.volume}dB</span>
+                    </div>
+
+                    {/* Pan slider */}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[9px] text-gray-500 font-mono w-4">Pan</span>
+                      <input
+                        type="range"
+                        min={-1}
+                        max={1}
+                        step={0.05}
+                        value={track.pan ?? 0}
+                        onChange={e => beatz.setTrackPan(track.id, parseFloat(e.target.value))}
+                        onDoubleClick={() => beatz.setTrackPan(track.id, 0)}
+                        className="flex-1 h-1.5 accent-cyan-500 cursor-pointer"
+                        title="Pan (double-click to center)"
+                      />
+                      <span className="text-[9px] text-gray-500 font-mono w-7 text-right">
+                        {(track.pan ?? 0) === 0 ? 'C' : `${(track.pan ?? 0) < 0 ? 'L' : 'R'}${Math.round(Math.abs(track.pan ?? 0) * 100)}`}
+                      </span>
+                    </div>
+
+                    {/* FX sends */}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[9px] text-gray-500 font-mono w-4">Rev</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={track.reverb ?? 0}
+                        onChange={e => beatz.setTrackReverb(track.id, parseFloat(e.target.value))}
+                        className="flex-1 h-1.5 accent-pink-500 cursor-pointer"
+                        title="Reverb send"
+                      />
+                      <span className="text-[9px] text-gray-500 font-mono w-4">Dly</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={track.delay ?? 0}
+                        onChange={e => beatz.setTrackDelay(track.id, parseFloat(e.target.value))}
+                        className="flex-1 h-1.5 accent-emerald-500 cursor-pointer"
+                        title="Delay send"
+                      />
                     </div>
 
                     {/* Default note (instrument tracks) */}
@@ -835,8 +955,9 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                               const effectiveDur = step?.duration || track.stepDuration || '16n';
                               const isNonDefaultDur = isActive && effectiveDur !== '16n';
                               const durShort = NOTE_DURATIONS.find(d => d.value === effectiveDur)?.short;
+                              const stepNotes = (step?.note || track.defaultNote).split(',');
                               const noteDisplay = track.type === 'instrument' && isActive
-                                ? (step.note || track.defaultNote).replace(/\d/, '')
+                                ? stepNotes[0].replace(/\d/g, '') + (stepNotes.length > 1 ? '+' : '')
                                 : null;
 
                               return (
@@ -959,6 +1080,23 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
           anchorY={stepEditor.y}
         />
       )}
+
+      {/* ── Piano Roll ── */}
+      {pianoRollTrackId && project && (() => {
+        const prTrack = project.tracks.find(t => t.id === pianoRollTrackId);
+        if (!prTrack || prTrack.type !== 'instrument') return null;
+        return (
+          <PianoRoll
+            track={prTrack}
+            bars={project.bars}
+            stepsPerBar={project.stepsPerBar}
+            isPlaying={isPlaying && !isPaused}
+            currentStep={currentStep}
+            onSetSteps={(steps) => beatz.setTrackSteps(prTrack.id, steps)}
+            onClose={() => setPianoRollTrackId(null)}
+          />
+        );
+      })()}
 
       {/* ── Hum Modal ── */}
       {showHumModal && project && (

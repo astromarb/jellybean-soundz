@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { BeatzProject, BeatzTrack, BeatzStep, InstrumentType, NoteDuration, Sound, JELLYBEAN_COLORS } from '../types';
 import * as db from '../lib/db';
+import { createDemoProject } from '../lib/demoSong';
 
 const DEFAULT_STEPS_PER_BAR = 16;
 
@@ -13,6 +14,7 @@ function makeSteps(count: number, defaultNote = 'C4'): BeatzStep[] {
 }
 
 export function useBeatz(sounds: Sound[]) {
+  void sounds; // reserved (sound tracks reference the library at render/play time)
   const [projects, setProjects] = useState<BeatzProject[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,44 +23,8 @@ export function useBeatz(sounds: Sound[]) {
     async function init() {
       let stored = await db.getAllBeatzProjects();
       if (stored.length === 0) {
-        // Create a default starter project with some tracks pre-populated from library sounds
-        const defaultBars = 2;
-        const totalSteps = defaultBars * DEFAULT_STEPS_PER_BAR;
-        const tracks: BeatzTrack[] = [];
-
-        // Add first 3 library sounds as tracks if available
-        const soundsToSeed = sounds.slice(0, 3);
-        soundsToSeed.forEach((sound) => {
-          tracks.push({
-            id: uid('bt'),
-            name: sound.name,
-            type: 'sound',
-            soundId: sound.id,
-            defaultNote: 'C4',
-            stepDuration: '16n',
-            steps: makeSteps(totalSteps),
-            volume: -6,
-            muted: false,
-            color: sound.color,
-          });
-        });
-
-        // Add a default kick pattern to first sound track if it exists
-        if (tracks.length > 0) {
-          [0, 4, 8, 12, 16, 20, 24, 28].forEach(i => {
-            if (i < totalSteps) tracks[0].steps[i].active = true;
-          });
-        }
-
-        const project: BeatzProject = {
-          id: uid('bp'),
-          name: 'Beat 1',
-          bpm: 120,
-          bars: defaultBars,
-          stepsPerBar: DEFAULT_STEPS_PER_BAR,
-          tracks,
-          createdAt: Date.now(),
-        };
+        // First load: seed the 32-bar showcase composition
+        const project = createDemoProject();
         await db.saveBeatzProject(project);
         stored = [project];
       }
@@ -176,6 +142,34 @@ export function useBeatz(sounds: Sound[]) {
     mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, muted: !t.muted } : t) }));
   }, [mutateActive]);
 
+  const toggleSolo = useCallback((trackId: string) => {
+    mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, solo: !t.solo } : t) }));
+  }, [mutateActive]);
+
+  const setTrackPan = useCallback((trackId: string, pan: number) => {
+    mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, pan: Math.max(-1, Math.min(1, pan)) } : t) }));
+  }, [mutateActive]);
+
+  const setTrackReverb = useCallback((trackId: string, reverb: number) => {
+    mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, reverb: Math.max(0, Math.min(1, reverb)) } : t) }));
+  }, [mutateActive]);
+
+  const setTrackDelay = useCallback((trackId: string, delay: number) => {
+    mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, delay: Math.max(0, Math.min(1, delay)) } : t) }));
+  }, [mutateActive]);
+
+  const setTrackSteps = useCallback((trackId: string, steps: BeatzStep[]) => {
+    mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, steps } : t) }));
+  }, [mutateActive]);
+
+  const loadDemoSong = useCallback(async () => {
+    const project = createDemoProject();
+    await db.saveBeatzProject(project);
+    setProjects(prev => [...prev, project]);
+    setActiveProjectId(project.id);
+    return project;
+  }, []);
+
   const setTrackDefaultNote = useCallback((trackId: string, note: string) => {
     mutateActive(p => ({ ...p, tracks: p.tracks.map(t => t.id === trackId ? { ...t, defaultNote: note } : t) }));
   }, [mutateActive]);
@@ -279,8 +273,9 @@ export function useBeatz(sounds: Sound[]) {
     setActiveProjectId, addProject, renameProject, deleteProject,
     setBpm, setBars,
     addSoundTrack, addInstrumentTrack, addTrackFromSteps, removeTrack,
-    setTrackVolume, toggleMute, setTrackDefaultNote, renameTrack, setTrackColor,
-    toggleStep, setStepNote, setStepDuration, clearTrack, fillTrack,
-    setTrackStepDuration,
+    setTrackVolume, toggleMute, toggleSolo, setTrackPan, setTrackReverb, setTrackDelay,
+    setTrackDefaultNote, renameTrack, setTrackColor,
+    toggleStep, setStepNote, setStepDuration, setTrackSteps, clearTrack, fillTrack,
+    setTrackStepDuration, loadDemoSong,
   };
 }

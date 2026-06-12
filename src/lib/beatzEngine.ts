@@ -209,15 +209,14 @@ export async function startBeatz(
   masterComp.connect(masterLimiter);
   activeNodes.push(masterComp, masterLimiter);
 
-  // Shared FX send buses
-  const reverbBus = new Tone.Reverb({ decay: 2.6, preDelay: 0.02 });
+  // Shared FX send buses — Freeverb is algorithmic (no async generate() needed)
+  const reverbBus = new Tone.Freeverb({ roomSize: 0.65, dampening: 3000 });
   reverbBus.wet.value = 1;
   reverbBus.connect(masterComp);
   const delayBus = new Tone.FeedbackDelay('8n.', 0.3);
   delayBus.wet.value = 1;
   delayBus.connect(masterComp);
   activeNodes.push(reverbBus, delayBus);
-  try { await reverbBus.generate(); } catch (_) {}
 
   // Tick sequence for UI position tracking
   const tickArr = Array.from({ length: totalSteps }, (_, i) => i);
@@ -278,19 +277,21 @@ export async function startBeatz(
       const audioBuffer = await Tone.context.rawContext.decodeAudioData(arrayBuffer);
       const toneBuffer = new Tone.ToneAudioBuffer(audioBuffer);
 
+      // Pre-allocate a small pool of Players to avoid per-hit allocation and GC pressure
+      const POOL = 4;
+      const pool = Array.from({ length: POOL }, () => new Tone.Player(toneBuffer).connect(channel));
+      pool.forEach(p => activeNodes.push(p));
+      let poolIdx = 0;
+
       const stepsArr = track.steps.slice(0, totalSteps).map(s => s.active ? true : null);
 
       const seq = new Tone.Sequence(
         (time, active) => {
           if (!active) return;
-          // Create a one-shot player from pre-decoded buffer each hit
-          const player = new Tone.Player(toneBuffer).connect(channel);
+          const player = pool[poolIdx % POOL];
+          poolIdx++;
+          try { player.stop(time); } catch (_) {}
           player.start(time);
-          // Schedule dispose after sound finishes
-          const disposeAt = audioBuffer.duration + 0.5;
-          setTimeout(() => {
-            try { player.dispose(); } catch (_) {}
-          }, disposeAt * 1000);
         },
         stepsArr,
         '16n'

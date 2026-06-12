@@ -254,6 +254,11 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   const gridRef = useRef<HTMLDivElement>(null);
   const soundPickerRef = useRef<HTMLDivElement>(null);
   const instrPickerRef = useRef<HTMLDivElement>(null);
+  // Decouples Tone.js audio callback from React renders: write step to ref,
+  // read it in a RAF loop so state updates happen at display refresh rate (~60fps)
+  // rather than on every audio scheduler tick.
+  const currentStepRef = useRef(-1);
+  const prevPlayBarRef = useRef(-1);
 
   const project = beatz.activeProject;
 
@@ -297,6 +302,48 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     return () => document.removeEventListener('mousedown', handle);
   }, [contextMenu]);
 
+  // ── RAF loop: sync currentStepRef → currentStep state at display refresh rate ──
+  useEffect(() => {
+    if (!isPlaying || isPaused) return;
+    let raf: number;
+    const sync = () => {
+      // Functional update: React bails out without re-render if value is unchanged
+      setCurrentStep(prev => {
+        const next = currentStepRef.current;
+        return next === prev ? prev : next;
+      });
+      raf = requestAnimationFrame(sync);
+    };
+    raf = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying, isPaused]);
+
+  // ── Auto-scroll: follow the playhead, advance view when nearing right edge ──
+  useEffect(() => {
+    if (!isPlaying || isPaused || currentStep < 0 || !gridRef.current || !project) return;
+    const currentBar = Math.floor(currentStep / project.stepsPerBar);
+    if (currentBar === prevPlayBarRef.current) return;
+    prevPlayBarRef.current = currentBar;
+
+    const container = gridRef.current;
+    // +13 per bar gap accounts for bar separator (w-px mx-1 = 9px) + surrounding gaps
+    const barW = barPixelWidth(stepW, project.stepsPerBar) + 13;
+    const barPx = SIDEBAR_W + currentBar * barW;
+
+    if (currentBar === 0) {
+      container.scrollTo({ left: 0, behavior: 'smooth' });
+      return;
+    }
+    // Scroll forward when the current bar enters the right 30% of the visible area
+    const visibleRight = container.scrollLeft + container.clientWidth;
+    if (barPx > visibleRight - container.clientWidth * 0.3) {
+      container.scrollTo({
+        left: Math.max(0, barPx - SIDEBAR_W - 20),
+        behavior: 'smooth',
+      });
+    }
+  }, [currentStep, isPlaying, isPaused, project, stepW]);
+
   // ── Transport ──
   const handlePlay = useCallback(async () => {
     if (!audioEnabled) await enableAudio();
@@ -305,8 +352,9 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
       setIsPaused(false);
     } else if (!isPlaying && project) {
       await Tone.start();
+      // Write step index to ref only — no React setState from audio callback
       await startBeatz(project, sounds, (step) => {
-        setCurrentStep(step);
+        currentStepRef.current = step;
       });
       setIsPlaying(true);
       setIsPaused(false);
@@ -324,6 +372,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     setIsPlaying(false);
     setIsPaused(false);
     setCurrentStep(-1);
+    currentStepRef.current = -1;
+    prevPlayBarRef.current = -1;
   }, []);
 
   // ── Export ──

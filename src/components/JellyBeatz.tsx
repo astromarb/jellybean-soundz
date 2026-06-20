@@ -221,6 +221,76 @@ function DurationIcon({ value }: { value: NoteDuration }) {
   );
 }
 
+// PlayheadStrip: moves a DOM div directly in a RAF loop — zero React re-renders
+const PlayheadStrip = React.memo(function PlayheadStrip({
+  stepRef,
+  stepW,
+  stepsPerBar,
+  onBarChange,
+  active,
+}: {
+  stepRef: React.MutableRefObject<number>;
+  stepW: number;
+  stepsPerBar: number;
+  onBarChange: (bar: number) => void;
+  active: boolean;
+}) {
+  const elRef = useRef<HTMLDivElement>(null);
+  const prevBarRef = useRef(-1);
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (!active) {
+      if (el) el.style.left = '-9999px';
+      prevBarRef.current = -1;
+      return;
+    }
+    const beatsPerBar = stepsPerBar / 4;
+    const beatGroupW = 4 * stepW + 3 * 2 + 4;
+    const barW = beatsPerBar * beatGroupW + (beatsPerBar - 1) * 2;
+    const totalBarW = barW + 13;
+
+    let raf: number;
+    const loop = () => {
+      const step = stepRef.current;
+      if (el && step >= 0) {
+        const bar = Math.floor(step / stepsPerBar);
+        const beatInBar = Math.floor((step % stepsPerBar) / 4);
+        const subInBeat = step % 4;
+        const left = SIDEBAR_W + 8
+          + bar * totalBarW
+          + beatInBar * (beatGroupW + 2)
+          + 2
+          + subInBeat * (stepW + 2);
+        el.style.left = left + 'px';
+        el.style.width = stepW + 'px';
+        if (bar !== prevBarRef.current) {
+          prevBarRef.current = bar;
+          onBarChange(bar);
+        }
+      } else if (el && step < 0) {
+        el.style.left = '-9999px';
+        prevBarRef.current = -1;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [active, stepRef, stepW, stepsPerBar, onBarChange]);
+
+  return (
+    <div
+      ref={elRef}
+      className="absolute top-0 bottom-0 pointer-events-none z-10"
+      style={{
+        left: -9999,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderLeft: '2px solid rgba(255,255,255,0.45)',
+      }}
+    />
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -258,7 +328,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   // read it in a RAF loop so state updates happen at display refresh rate (~60fps)
   // rather than on every audio scheduler tick.
   const currentStepRef = useRef(-1);
-  const prevPlayBarRef = useRef(-1);
+  const [currentBar, setCurrentBar] = useState(-1);
+  const handleBarChange = useCallback((bar: number) => { setCurrentBar(bar); }, []);
 
   const project = beatz.activeProject;
 
@@ -302,12 +373,11 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     return () => document.removeEventListener('mousedown', handle);
   }, [contextMenu]);
 
-  // ── RAF loop: sync currentStepRef → currentStep state at display refresh rate ──
+  // ── RAF loop: only update React state when PianoRoll needs it ──
   useEffect(() => {
-    if (!isPlaying || isPaused) return;
+    if (!isPlaying || isPaused || !pianoRollTrackId) return;
     let raf: number;
     const sync = () => {
-      // Functional update: React bails out without re-render if value is unchanged
       setCurrentStep(prev => {
         const next = currentStepRef.current;
         return next === prev ? prev : next;
@@ -316,25 +386,18 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     };
     raf = requestAnimationFrame(sync);
     return () => cancelAnimationFrame(raf);
-  }, [isPlaying, isPaused]);
+  }, [isPlaying, isPaused, pianoRollTrackId]);
 
-  // ── Auto-scroll: follow the playhead, advance view when nearing right edge ──
+  // ── Auto-scroll: fires when bar changes, not every step ──
   useEffect(() => {
-    if (!isPlaying || isPaused || currentStep < 0 || !gridRef.current || !project) return;
-    const currentBar = Math.floor(currentStep / project.stepsPerBar);
-    if (currentBar === prevPlayBarRef.current) return;
-    prevPlayBarRef.current = currentBar;
-
+    if (currentBar < 0 || !gridRef.current || !project) return;
     const container = gridRef.current;
-    // +13 per bar gap accounts for bar separator (w-px mx-1 = 9px) + surrounding gaps
     const barW = barPixelWidth(stepW, project.stepsPerBar) + 13;
     const barPx = SIDEBAR_W + currentBar * barW;
-
     if (currentBar === 0) {
       container.scrollTo({ left: 0, behavior: 'smooth' });
       return;
     }
-    // Scroll forward when the current bar enters the right 30% of the visible area
     const visibleRight = container.scrollLeft + container.clientWidth;
     if (barPx > visibleRight - container.clientWidth * 0.3) {
       container.scrollTo({
@@ -342,7 +405,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
         behavior: 'smooth',
       });
     }
-  }, [currentStep, isPlaying, isPaused, project, stepW]);
+  }, [currentBar, project, stepW]);
 
   // ── Transport ──
   const handlePlay = useCallback(async () => {
@@ -351,7 +414,6 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
       resumeBeatz();
       setIsPaused(false);
     } else if (!isPlaying && project) {
-      await Tone.start();
       // Write step index to ref only — no React setState from audio callback
       await startBeatz(project, sounds, (step) => {
         currentStepRef.current = step;
@@ -372,8 +434,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     setIsPlaying(false);
     setIsPaused(false);
     setCurrentStep(-1);
+    setCurrentBar(-1);
     currentStepRef.current = -1;
-    prevPlayBarRef.current = -1;
   }, []);
 
   // ── Export ──
@@ -828,7 +890,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
             </div>
           </div>
         ) : (
-          <div className="min-w-max">
+          <div className="min-w-max relative">
             {/* Bar labels */}
             <div className="flex sticky top-0 z-10 bg-gray-950/95 backdrop-blur-sm border-b border-gray-800">
               {/* sidebar spacer */}
@@ -847,6 +909,15 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                 ))}
               </div>
             </div>
+
+            {/* Playhead overlay — updates via direct DOM, no React re-renders */}
+            <PlayheadStrip
+              stepRef={currentStepRef}
+              stepW={stepW}
+              stepsPerBar={project.stepsPerBar}
+              onBarChange={handleBarChange}
+              active={isPlaying && !isPaused}
+            />
 
             {/* Tracks */}
             {project.tracks.map(track => {
@@ -1046,7 +1117,6 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                               const stepIdx = bar * project.stepsPerBar + beat * 4 + sub;
                               const step = track.steps[stepIdx];
                               const isActive = step?.active ?? false;
-                              const isCurrent = isPlaying && stepIdx === currentStep;
                               const effectiveDur = step?.duration || track.stepDuration || '16n';
                               const isNonDefaultDur = isActive && effectiveDur !== '16n';
                               const durShort = NOTE_DURATIONS.find(d => d.value === effectiveDur)?.short;
@@ -1065,7 +1135,6 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                     ${isActive
                                       ? 'border border-white/20'
                                       : 'bg-gray-800/80 border border-gray-700/50 hover:bg-gray-700/80'}
-                                    ${isCurrent ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-950' : ''}
                                   `}
                                   style={{
                                     width: stepW,

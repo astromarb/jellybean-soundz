@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { BeatzProject, BeatzTrack, BeatzStep, InstrumentType, NoteDuration, Sound, JELLYBEAN_COLORS } from '../types';
 import * as db from '../lib/db';
 import { createDemoProject } from '../lib/demoSong';
@@ -18,6 +18,7 @@ export function useBeatz(sounds: Sound[]) {
   const [projects, setProjects] = useState<BeatzProject[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -48,7 +49,8 @@ export function useBeatz(sounds: Sound[]) {
     setProjects(prev => prev.map(p => {
       if (p.id !== activeProjectId) return p;
       const updated = updater(p);
-      db.saveBeatzProject(updated);
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => { db.saveBeatzProject(updated); }, 400);
       return updated;
     }));
   }, [activeProjectId]);

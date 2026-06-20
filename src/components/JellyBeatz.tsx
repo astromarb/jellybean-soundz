@@ -8,7 +8,8 @@ import React, {
 import HumModal from './HumModal';
 import PianoRoll from './PianoRoll';
 import * as Tone from 'tone';
-import { Sound, JELLYBEAN_COLORS, InstrumentType, NoteDuration, NOTE_DURATIONS, BeatzTrack } from '../types';
+import { Sound, AppMode, JELLYBEAN_COLORS, InstrumentType, NoteDuration, NOTE_DURATIONS, BeatzTrack } from '../types';
+import { confirmExportRights } from '../lib/exportGuard';
 import { useBeatz } from '../hooks/useBeatz';
 import {
   startBeatz,
@@ -29,6 +30,7 @@ interface Props {
   sounds: Sound[];
   audioEnabled: boolean;
   enableAudio: () => Promise<void>;
+  mode: AppMode;
 }
 
 interface ContextMenu {
@@ -295,7 +297,7 @@ const PlayheadStrip = React.memo(function PlayheadStrip({
 // Main Component
 // ---------------------------------------------------------------------------
 
-export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props) {
+export default function JellyBeatz({ sounds, audioEnabled, enableAudio, mode }: Props) {
   const beatz = useBeatz(sounds);
 
   // Playback
@@ -441,6 +443,12 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   // ── Export ──
   const handleExport = useCallback(async () => {
     if (!project || isExporting) return;
+    // Only sound-tracks carry external rights; instrument tracks are procedural.
+    const usedSounds = project.tracks
+      .filter((t) => t.type === 'sound' && t.soundId)
+      .map((t) => sounds.find((s) => s.id === t.soundId))
+      .filter((s): s is Sound => !!s);
+    if (!confirmExportRights(usedSounds, mode, 'beat export')) return;
     if (!audioEnabled) await enableAudio();
     setIsExporting(true);
     try {
@@ -452,7 +460,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     } finally {
       setIsExporting(false);
     }
-  }, [project, sounds, audioEnabled, enableAudio, isExporting]);
+  }, [project, sounds, audioEnabled, enableAudio, isExporting, mode]);
 
   // ── BPM helpers ──
   const startEditBpm = () => {

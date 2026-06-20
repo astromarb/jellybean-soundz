@@ -1,5 +1,6 @@
 import React from 'react';
 import { Sound } from '../types';
+import { rightsBadge } from '../lib/rights';
 
 interface SoundLibraryItemProps {
   sound: Sound;
@@ -31,6 +32,7 @@ export default function SoundLibraryItem({
   };
 
   const shortType = sound.synthParams.synthType.replace('Synth', '').replace('Pluck', 'PLK') || 'SYN';
+  const badge = rightsBadge(sound.rights);
 
   return (
     <div
@@ -62,7 +64,15 @@ export default function SoundLibraryItem({
             <span title="Built-in preset" className="text-[9px] text-emerald-500 shrink-0">🌱</span>
           )}
         </div>
-        <div className="text-xs text-gray-500 font-mono">{shortType}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500 font-mono">{shortType}</span>
+          <span
+            title={badge.title}
+            className={`px-1 py-px rounded text-[8px] font-medium border ${badge.className} shrink-0`}
+          >
+            {badge.emoji} {badge.label}
+          </span>
+        </div>
       </div>
 
       {/* Action buttons */}

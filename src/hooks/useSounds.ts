@@ -6,7 +6,10 @@ import { downloadBlob } from '../lib/wavEncoder';
 import { deriveProceduralRights, deriveUploadRights, withRights } from '../lib/rights';
 import JSZip from 'jszip';
 
-async function importSingleAudioFile(file: File, colorIndex: number): Promise<Sound | null> {
+// Optional metadata recovered from an exported manifest.json.
+type ImportMeta = Partial<Pick<Sound, 'name' | 'synthParams' | 'effects' | 'color' | 'duration' | 'tags' | 'rights'>>;
+
+async function importSingleAudioFile(file: File, colorIndex: number, meta?: ImportMeta): Promise<Sound | null> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const ctx = new AudioContext();
@@ -17,19 +20,19 @@ async function importSingleAudioFile(file: File, colorIndex: number): Promise<So
     const wavBlob = audioBufferToWav(audioBuffer);
 
     const id = `import-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const name = file.name.replace(/\.[^.]+$/, '');
-    const color = JELLYBEAN_COLORS[colorIndex % JELLYBEAN_COLORS.length];
+    const name = meta?.name ?? file.name.replace(/\.[^.]+$/, '');
+    const color = meta?.color ?? JELLYBEAN_COLORS[colorIndex % JELLYBEAN_COLORS.length];
 
     const sound: Sound = {
       id,
       name,
-      synthParams: { ...DEFAULT_SYNTH_PARAMS },
-      effects: { ...DEFAULT_EFFECTS },
+      synthParams: meta?.synthParams ?? { ...DEFAULT_SYNTH_PARAMS },
+      effects: meta?.effects ?? { ...DEFAULT_EFFECTS },
       color,
-      duration: audioBuffer.duration,
+      duration: meta?.duration ?? audioBuffer.duration,
       createdAt: Date.now(),
-      tags: ['imported'],
-      rights: deriveUploadRights(),
+      tags: meta?.tags ?? ['imported'],
+      rights: meta?.rights ?? deriveUploadRights(),
     };
 
     await db.saveAudioBlob(id, wavBlob);
@@ -597,13 +600,26 @@ export function useSounds() {
       try {
         if (file.name.toLowerCase().endsWith('.zip')) {
           const zip = await JSZip.loadAsync(file);
+          // Recover per-file metadata (incl. rights) from manifest.json if present.
+          const metaByFilename = new Map<string, ImportMeta>();
+          const manifestEntry = zip.file('manifest.json');
+          if (manifestEntry) {
+            try {
+              const parsed = JSON.parse(await manifestEntry.async('string')) as { sounds?: Array<ImportMeta & { filename?: string }> };
+              for (const m of parsed.sounds ?? []) {
+                if (m.filename) metaByFilename.set(m.filename, m);
+              }
+            } catch (err) {
+              console.warn('Failed to parse manifest.json:', err);
+            }
+          }
           for (const [name, entry] of Object.entries(zip.files)) {
             if (entry.dir) continue;
             const ext = name.split('.').pop()?.toLowerCase() ?? '';
             if (!['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'webm'].includes(ext)) continue;
             const blob = await entry.async('blob');
             const audioFile = new File([blob], name, { type: `audio/${ext}` });
-            const sound = await importSingleAudioFile(audioFile, sounds.length + newSounds.length);
+            const sound = await importSingleAudioFile(audioFile, sounds.length + newSounds.length, metaByFilename.get(name));
             if (sound) newSounds.push(sound);
           }
         } else {
@@ -624,13 +640,34 @@ export function useSounds() {
   const exportAllSounds = useCallback(async (): Promise<void> => {
     if (sounds.length === 0) return;
     const zip = new JSZip();
+    const usedNames = new Set<string>();
+    const manifest: Array<Record<string, unknown>> = [];
     for (const sound of sounds) {
       let blob = await db.getAudioBlob(sound.id);
       if (!blob) {
         blob = await renderSoundToWav(sound.synthParams, sound.effects, sound.duration);
       }
-      zip.file(`${sound.name.replace(/\s+/g, '_')}.wav`, blob);
+      // Ensure unique filenames so the manifest can match audio back on import.
+      let base = sound.name.replace(/\s+/g, '_') || 'sound';
+      let filename = `${base}.wav`;
+      let n = 1;
+      while (usedNames.has(filename)) filename = `${base}_${n++}.wav`;
+      usedNames.add(filename);
+
+      zip.file(filename, blob);
+      manifest.push({
+        filename,
+        name: sound.name,
+        synthParams: sound.synthParams,
+        effects: sound.effects,
+        color: sound.color,
+        duration: sound.duration,
+        tags: sound.tags,
+        rights: sound.rights,
+      });
     }
+    // manifest.json carries full metadata incl. rights so re-import restores it.
+    zip.file('manifest.json', JSON.stringify({ version: 1, sounds: manifest }, null, 2));
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     downloadBlob(zipBlob, 'jellybean-soundz.zip');
   }, [sounds]);

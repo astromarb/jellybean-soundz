@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Sound, ChainItem } from '../types';
+import { Sound, ChainItem, AppMode } from '../types';
 import { useChains } from '../hooks/useChains';
 import { playChain, exportChainAsWav, getChainDuration } from '../lib/chainPlayer';
 import { downloadBlob } from '../lib/wavEncoder';
+import { confirmExportRights } from '../lib/exportGuard';
 
 // ─── Sound Palette (left panel) ──────────────────────────────────────────────
 
@@ -277,10 +278,12 @@ export default function ChainerTab({
   sounds,
   audioEnabled,
   enableAudio,
+  mode,
 }: {
   sounds: Sound[];
   audioEnabled: boolean;
   enableAudio: () => Promise<void>;
+  mode: AppMode;
 }) {
   const {
     chains,
@@ -354,6 +357,10 @@ export default function ChainerTab({
 
   const handleExport = async () => {
     if (!activeChain || activeChain.items.length === 0 || isExporting) return;
+    const usedSounds = activeChain.items
+      .map((it) => sounds.find((s) => s.id === it.soundId))
+      .filter((s): s is Sound => !!s);
+    if (!confirmExportRights(usedSounds, mode, 'chain export')) return;
     setIsExporting(true);
     try {
       const blob = await exportChainAsWav(activeChain.items, sounds);

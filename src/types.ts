@@ -78,6 +78,35 @@ export interface EffectsParams {
   bitCrusher: BitCrusherParams;
 }
 
+// ── License / rights metadata ──────────────────────────────────────────────
+// Every sound knows where it came from and what it may legally be used for.
+export type SoundSource = 'tone_synth' | 'ai_api' | 'sample_library' | 'user_upload';
+
+export type LicenseScope =
+  | 'personal'
+  | 'commercial_individual'
+  | 'commercial_org'
+  | 'research_only'
+  | 'unknown';
+
+// The three workspace modes the app can operate in.
+export type AppMode = 'personal' | 'commercial' | 'research';
+
+export interface SoundRights {
+  source: SoundSource;
+  provider?: string;          // 'Claude (procedural)' | 'ElevenLabs' | 'Stability' | 'User'
+  model?: string;
+  prompt?: string;
+  planAtGeneration?: string;  // e.g. 'commercial' | 'personal' (for AI-API sounds)
+  licenseScope: LicenseScope;
+  attributionRequired: boolean;
+  canModify: boolean;
+  canExport: boolean;
+  canUseInClientWork: boolean;
+  termsUrl?: string;
+  generatedAt: number;
+}
+
 export interface Sound {
   id: string;
   name: string;
@@ -87,6 +116,7 @@ export interface Sound {
   duration: number; // seconds
   createdAt: number;
   tags?: string[]; // e.g. ['ai', 'seed', 'imported', 'recorded']
+  rights?: SoundRights; // optional for back-compat; migration + runtime backfill fill it
 }
 
 export interface PadAssignment {

@@ -1,5 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Sound, Magazine, Page, Chain, BeatzProject } from '../types';
+import { backfillRights } from './rights';
 
 interface JellybeanDB extends DBSchema {
   sounds: {
@@ -35,7 +36,7 @@ let dbPromise: Promise<IDBPDatabase<JellybeanDB>> | null = null;
 
 function getDb(): Promise<IDBPDatabase<JellybeanDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<JellybeanDB>('jellybean-soundz', 4, {
+    dbPromise = openDB<JellybeanDB>('jellybean-soundz', 5, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // --- Fresh install ---
         if (oldVersion === 0) {
@@ -83,6 +84,24 @@ function getDb(): Promise<IDBPDatabase<JellybeanDB>> {
         // --- v4 addition: beatzProjects store ---
         if (oldVersion < 4) {
           db.createObjectStore('beatzProjects', { keyPath: 'id' });
+        }
+
+        // --- v5 addition: backfill license/rights metadata on existing sounds ---
+        if (oldVersion >= 1 && oldVersion < 5) {
+          try {
+            const soundStore = transaction.objectStore('sounds');
+            let cursor = await soundStore.openCursor();
+            while (cursor) {
+              const sound = cursor.value as Sound;
+              if (!sound.rights) {
+                await cursor.update({ ...sound, rights: backfillRights(sound) });
+              }
+              cursor = await cursor.continue();
+            }
+          } catch (err) {
+            // Non-fatal: runtime backfill in useSounds covers any stragglers.
+            console.warn('rights backfill during upgrade failed:', err);
+          }
         }
       },
     });

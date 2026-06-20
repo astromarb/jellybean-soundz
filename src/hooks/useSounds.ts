@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Sound, SynthParams, EffectsParams, JELLYBEAN_COLORS, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from '../types';
+import { Sound, SoundRights, SynthParams, EffectsParams, JELLYBEAN_COLORS, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from '../types';
 import * as db from '../lib/db';
 import { renderSoundToWav } from '../lib/audio';
 import { downloadBlob } from '../lib/wavEncoder';
+import { deriveProceduralRights, deriveUploadRights, withRights } from '../lib/rights';
 import JSZip from 'jszip';
 
 async function importSingleAudioFile(file: File, colorIndex: number): Promise<Sound | null> {
@@ -27,6 +28,8 @@ async function importSingleAudioFile(file: File, colorIndex: number): Promise<So
       color,
       duration: audioBuffer.duration,
       createdAt: Date.now(),
+      tags: ['imported'],
+      rights: deriveUploadRights(),
     };
 
     await db.saveAudioBlob(id, wavBlob);
@@ -478,13 +481,20 @@ export function useSounds() {
             duration: seed.duration,
             createdAt: Date.now(),
             tags: ['seed'],
+            rights: deriveProceduralRights(undefined, 'Tone.js (procedural)'),
           };
           await db.saveSound(sound);
           seeded.push(sound);
         }
         setSounds(seeded);
       } else {
-        setSounds(stored);
+        // Defensive runtime backfill for any sound missing rights metadata.
+        const needsBackfill = stored.some((s) => !s.rights);
+        const normalized = needsBackfill ? stored.map(withRights) : stored;
+        if (needsBackfill) {
+          await Promise.all(normalized.map((s) => db.saveSound(s)));
+        }
+        setSounds(normalized);
       }
       setLoading(false);
     }
@@ -492,7 +502,7 @@ export function useSounds() {
   }, []);
 
   const addSound = useCallback(
-    async (name: string, synthParams: SynthParams, effects: EffectsParams, duration: number = 2, tags?: string[]): Promise<Sound> => {
+    async (name: string, synthParams: SynthParams, effects: EffectsParams, duration: number = 2, tags?: string[], rights?: SoundRights): Promise<Sound> => {
       const id = `sound-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const colorIndex = sounds.length % JELLYBEAN_COLORS.length;
       const color = JELLYBEAN_COLORS[colorIndex];
@@ -506,9 +516,39 @@ export function useSounds() {
         duration,
         createdAt: Date.now(),
         ...(tags && tags.length > 0 ? { tags } : {}),
+        rights: rights ?? deriveProceduralRights(undefined, 'Tone.js (procedural)'),
       };
 
       const blob = await renderSoundToWav(synthParams, effects, duration);
+      await db.saveAudioBlob(id, blob);
+      await db.saveSound(sound);
+
+      setSounds((prev) => [...prev, sound]);
+      return sound;
+    },
+    [sounds.length]
+  );
+
+  // Save a sound from a ready-made audio blob (AI audio providers, recordings).
+  // Synth params are placeholders — playback uses the blob, like imported sounds.
+  const addSoundFromBlob = useCallback(
+    async (name: string, blob: Blob, duration: number, rights: SoundRights, tags?: string[]): Promise<Sound> => {
+      const id = `sound-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const colorIndex = sounds.length % JELLYBEAN_COLORS.length;
+      const color = JELLYBEAN_COLORS[colorIndex];
+
+      const sound: Sound = {
+        id,
+        name,
+        synthParams: { ...DEFAULT_SYNTH_PARAMS },
+        effects: { ...DEFAULT_EFFECTS },
+        color,
+        duration,
+        createdAt: Date.now(),
+        ...(tags && tags.length > 0 ? { tags } : {}),
+        rights,
+      };
+
       await db.saveAudioBlob(id, blob);
       await db.saveSound(sound);
 
@@ -599,6 +639,7 @@ export function useSounds() {
     sounds,
     loading,
     addSound,
+    addSoundFromBlob,
     updateSound,
     deleteSound,
     downloadSound,

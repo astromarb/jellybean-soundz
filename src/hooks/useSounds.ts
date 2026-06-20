@@ -38,7 +38,7 @@ async function importSingleAudioFile(file: File, colorIndex: number): Promise<So
   }
 }
 
-// Default seed sounds for first load — 16 diverse, high-quality presets
+// Default seed sounds for first load
 const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: EffectsParams; color: string; duration: number }> = [
   // ── Drums / Percussion ───────────────────────────────────────────────────
   {
@@ -50,10 +50,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.1 },
       pitchDecay: 0.1, octaves: 10,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      filter: { enabled: true, frequency: 200, type: 'lowpass', Q: 1 },
-    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 200, type: 'lowpass', Q: 1 } },
   },
   {
     name: 'Snare',
@@ -105,10 +102,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.001, decay: 0.4, sustain: 0.1, release: 0.3 },
       harmonicity: 5.1, modulationIndex: 28, resonance: 3800, octaves: 2,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      reverb: { enabled: true, decay: 1.2, preDelay: 0.01, wet: 0.2 },
-    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 1.2, preDelay: 0.01, wet: 0.2 } },
   },
   {
     name: 'Low Tom',
@@ -119,10 +113,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.001, decay: 0.35, sustain: 0, release: 0.1 },
       pitchDecay: 0.06, octaves: 6,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      reverb: { enabled: true, decay: 0.6, preDelay: 0.01, wet: 0.15 },
-    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 0.6, preDelay: 0.01, wet: 0.15 } },
   },
   {
     name: 'High Tom',
@@ -144,10 +135,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.001, decay: 2.5, sustain: 0, release: 0.5 },
       harmonicity: 3.1, modulationIndex: 16, resonance: 6000, octaves: 3,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      reverb: { enabled: true, decay: 2.5, preDelay: 0.02, wet: 0.4 },
-    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 2.5, preDelay: 0.02, wet: 0.4 } },
   },
   // ── Bass ─────────────────────────────────────────────────────────────────
   {
@@ -159,10 +147,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.001, decay: 1.5, sustain: 0, release: 0.3 },
       pitchDecay: 0.5, octaves: 4,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      filter: { enabled: true, frequency: 300, type: 'lowpass', Q: 1 },
-    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 300, type: 'lowpass', Q: 1 } },
   },
   {
     name: 'Pluck Bass',
@@ -173,10 +158,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.01, decay: 0.3, sustain: 0.3, release: 0.3 },
       attackNoise: 0.5, dampening: 4000, resonancePluck: 0.9,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      filter: { enabled: true, frequency: 600, type: 'lowpass', Q: 1.5 },
-    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 600, type: 'lowpass', Q: 1.5 } },
   },
   {
     name: 'Sub Bass',
@@ -186,10 +168,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       synthType: 'Synth', note: 'A1', frequency: 55, volume: -4,
       envelope: { attack: 0.01, decay: 0.3, sustain: 0.7, release: 0.4 },
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      filter: { enabled: true, frequency: 200, type: 'lowpass', Q: 2 },
-    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 200, type: 'lowpass', Q: 2 } },
   },
   // ── Synth / Melodic ──────────────────────────────────────────────────────
   {
@@ -201,10 +180,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.001, decay: 1.8, sustain: 0, release: 0.5 },
       harmonicity: 5, modulationIndex: 12,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      reverb: { enabled: true, decay: 2.0, preDelay: 0.01, wet: 0.35 },
-    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 2.0, preDelay: 0.01, wet: 0.35 } },
   },
   {
     name: 'Marimba',
@@ -215,10 +191,7 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.15 },
       harmonicity: 2, modulationIndex: 4,
     },
-    effects: {
-      ...DEFAULT_EFFECTS,
-      reverb: { enabled: true, decay: 1.0, preDelay: 0.01, wet: 0.2 },
-    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 1.0, preDelay: 0.01, wet: 0.2 } },
   },
   {
     name: 'Supersaw',
@@ -265,6 +238,223 @@ const SEED_SOUNDS: Array<{ name: string; synthParams: SynthParams; effects: Effe
       delay: { enabled: true, delayTime: 0.375, feedback: 0.35, wet: 0.15 },
     },
   },
+  // ── UI Clicks ────────────────────────────────────────────────────────────
+  {
+    name: 'Soft Tap',
+    color: '#00FFBF',
+    duration: 0.15,
+    synthParams: {
+      synthType: 'PluckSynth', note: 'E5', frequency: 659.25, volume: -10,
+      envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.04 },
+      attackNoise: 0.3, dampening: 5500, resonancePluck: 0.7,
+    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 2500, type: 'lowpass', Q: 1 } },
+  },
+  {
+    name: 'Hard Click',
+    color: '#A8FF00',
+    duration: 0.12,
+    synthParams: {
+      synthType: 'FMSynth', note: 'C6', frequency: 1046.5, volume: -12,
+      envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 },
+      harmonicity: 1, modulationIndex: 2,
+    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 3000, type: 'highpass', Q: 0.5 } },
+  },
+  {
+    name: 'Wood Knock',
+    color: '#FF7A00',
+    duration: 0.18,
+    synthParams: {
+      synthType: 'MembraneSynth', note: 'C4', frequency: 261.63, volume: -8,
+      envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.04 },
+      pitchDecay: 0.02, octaves: 3,
+    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 1800, type: 'bandpass', Q: 2 } },
+  },
+  {
+    name: 'Key Press',
+    color: '#00C8FF',
+    duration: 0.1,
+    synthParams: {
+      synthType: 'NoiseSynth', note: 'C4', frequency: 440, volume: -14,
+      envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.02 },
+      noiseType: 'white',
+    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 2200, type: 'bandpass', Q: 3 } },
+  },
+  // ── Notifications ────────────────────────────────────────────────────────
+  {
+    name: 'Soft Chime',
+    color: '#FFE500',
+    duration: 1.0,
+    synthParams: {
+      synthType: 'FMSynth', note: 'E5', frequency: 659.25, volume: -13,
+      envelope: { attack: 0.002, decay: 0.6, sustain: 0, release: 0.25 },
+      harmonicity: 6, modulationIndex: 2,
+    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 1.5, preDelay: 0.01, wet: 0.3 } },
+  },
+  {
+    name: 'Alert Ping',
+    color: '#FF3B5C',
+    duration: 0.45,
+    synthParams: {
+      synthType: 'MetalSynth', note: 'A5', frequency: 880, volume: -14,
+      envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 },
+      harmonicity: 4.5, modulationIndex: 12, resonance: 4000, octaves: 1.5,
+    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 0.8, preDelay: 0.005, wet: 0.15 } },
+  },
+  {
+    name: 'Message Pop',
+    color: '#0055FF',
+    duration: 0.4,
+    synthParams: {
+      synthType: 'PluckSynth', note: 'G5', frequency: 783.99, volume: -10,
+      envelope: { attack: 0.001, decay: 0.28, sustain: 0, release: 0.1 },
+      attackNoise: 0.25, dampening: 3500, resonancePluck: 0.82,
+    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 0.9, preDelay: 0.005, wet: 0.2 } },
+  },
+  {
+    name: 'Reminder',
+    color: '#AA00FF',
+    duration: 0.8,
+    synthParams: {
+      synthType: 'AMSynth', note: 'D5', frequency: 587.33, volume: -13,
+      envelope: { attack: 0.04, decay: 0.5, sustain: 0.1, release: 0.2 },
+      harmonicity: 3,
+    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 1.2, preDelay: 0.01, wet: 0.25 } },
+  },
+  // ── Success / Confirm ────────────────────────────────────────────────────
+  {
+    name: 'Bright Ding',
+    color: '#FFB800',
+    duration: 0.8,
+    synthParams: {
+      synthType: 'FMSynth', note: 'C6', frequency: 1046.5, volume: -11,
+      envelope: { attack: 0.001, decay: 0.55, sustain: 0, release: 0.2 },
+      harmonicity: 8, modulationIndex: 3,
+    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 1.5, preDelay: 0.01, wet: 0.28 } },
+  },
+  {
+    name: 'Level Up',
+    color: '#00FF7A',
+    duration: 0.7,
+    synthParams: {
+      synthType: 'FMSynth', note: 'E5', frequency: 659.25, volume: -10,
+      envelope: { attack: 0.001, decay: 0.5, sustain: 0.15, release: 0.18 },
+      harmonicity: 2, modulationIndex: 5,
+    },
+    effects: { ...DEFAULT_EFFECTS, reverb: { enabled: true, decay: 1.5, preDelay: 0.01, wet: 0.3 } },
+  },
+  {
+    name: 'Coin Collect',
+    color: '#FFE500',
+    duration: 0.35,
+    synthParams: {
+      synthType: 'MetalSynth', note: 'B5', frequency: 987.77, volume: -12,
+      envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.08 },
+      harmonicity: 5, modulationIndex: 16, resonance: 4500, octaves: 1.5,
+    },
+    effects: { ...DEFAULT_EFFECTS },
+  },
+  // ── Error / Warning ──────────────────────────────────────────────────────
+  {
+    name: 'Buzz Deny',
+    color: '#FF3B5C',
+    duration: 0.3,
+    synthParams: {
+      synthType: 'NoiseSynth', note: 'C3', frequency: 130.81, volume: -10,
+      envelope: { attack: 0.001, decay: 0.18, sustain: 0.1, release: 0.08 },
+      noiseType: 'pink',
+    },
+    effects: {
+      ...DEFAULT_EFFECTS,
+      filter: { enabled: true, frequency: 600, type: 'lowpass', Q: 3 },
+      distortion: { enabled: true, wet: 0.5, distortion: 0.5 },
+    },
+  },
+  {
+    name: 'Soft Error',
+    color: '#FF7A00',
+    duration: 0.35,
+    synthParams: {
+      synthType: 'Synth', note: 'A3', frequency: 220, volume: -12,
+      envelope: { attack: 0.005, decay: 0.2, sustain: 0.1, release: 0.1 },
+    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 1200, type: 'lowpass', Q: 1.5 } },
+  },
+  // ── Transitions ──────────────────────────────────────────────────────────
+  {
+    name: 'Soft Whoosh',
+    color: '#00E5FF',
+    duration: 0.3,
+    synthParams: {
+      synthType: 'NoiseSynth', note: 'C4', frequency: 261.63, volume: -14,
+      envelope: { attack: 0.015, decay: 0.22, sustain: 0, release: 0.06 },
+      noiseType: 'pink',
+    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 3500, type: 'highpass', Q: 0.8 } },
+  },
+  {
+    name: 'Pop Open',
+    color: '#FF00CC',
+    duration: 0.22,
+    synthParams: {
+      synthType: 'PluckSynth', note: 'C6', frequency: 1046.5, volume: -11,
+      envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.06 },
+      attackNoise: 0.4, dampening: 6000, resonancePluck: 0.65,
+    },
+    effects: { ...DEFAULT_EFFECTS },
+  },
+  {
+    name: 'Swipe',
+    color: '#0095FF',
+    duration: 0.2,
+    synthParams: {
+      synthType: 'NoiseSynth', note: 'C4', frequency: 440, volume: -15,
+      envelope: { attack: 0.005, decay: 0.14, sustain: 0, release: 0.04 },
+      noiseType: 'white',
+    },
+    effects: { ...DEFAULT_EFFECTS, filter: { enabled: true, frequency: 2800, type: 'bandpass', Q: 1.2 } },
+  },
+  // ── Retro / Game ─────────────────────────────────────────────────────────
+  {
+    name: '8-Bit Blip',
+    color: '#A8FF00',
+    duration: 0.18,
+    synthParams: {
+      synthType: 'Synth', note: 'C5', frequency: 523.25, volume: -12,
+      envelope: { attack: 0.001, decay: 0.12, sustain: 0.15, release: 0.04 },
+    },
+    effects: { ...DEFAULT_EFFECTS, bitCrusher: { enabled: true, wet: 0.9, bits: 4 } },
+  },
+  {
+    name: 'Power Up',
+    color: '#FF9F00',
+    duration: 0.65,
+    synthParams: {
+      synthType: 'FMSynth', note: 'G5', frequency: 783.99, volume: -10,
+      envelope: { attack: 0.01, decay: 0.48, sustain: 0.25, release: 0.12 },
+      harmonicity: 3, modulationIndex: 9,
+    },
+    effects: { ...DEFAULT_EFFECTS, bitCrusher: { enabled: true, wet: 0.45, bits: 5 } },
+  },
+  {
+    name: 'Retro Jump',
+    color: '#FF0080',
+    duration: 0.28,
+    synthParams: {
+      synthType: 'MembraneSynth', note: 'C5', frequency: 523.25, volume: -10,
+      envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.06 },
+      pitchDecay: 0.08, octaves: 6,
+    },
+    effects: { ...DEFAULT_EFFECTS, bitCrusher: { enabled: true, wet: 0.6, bits: 5 } },
+  },
 ];
 
 export function useSounds() {
@@ -287,6 +477,7 @@ export function useSounds() {
             color: seed.color,
             duration: seed.duration,
             createdAt: Date.now(),
+            tags: ['seed'],
           };
           await db.saveSound(sound);
           seeded.push(sound);
@@ -301,7 +492,7 @@ export function useSounds() {
   }, []);
 
   const addSound = useCallback(
-    async (name: string, synthParams: SynthParams, effects: EffectsParams, duration: number = 2): Promise<Sound> => {
+    async (name: string, synthParams: SynthParams, effects: EffectsParams, duration: number = 2, tags?: string[]): Promise<Sound> => {
       const id = `sound-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const colorIndex = sounds.length % JELLYBEAN_COLORS.length;
       const color = JELLYBEAN_COLORS[colorIndex];
@@ -314,6 +505,7 @@ export function useSounds() {
         color,
         duration,
         createdAt: Date.now(),
+        ...(tags && tags.length > 0 ? { tags } : {}),
       };
 
       const blob = await renderSoundToWav(synthParams, effects, duration);

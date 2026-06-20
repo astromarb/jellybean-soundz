@@ -576,7 +576,7 @@ function validateSuggestion(raw: unknown): SoundSuggestion | null {
   };
 }
 
-export async function claudeSearch(query: string, apiKey: string): Promise<SoundSuggestion[]> {
+async function callClaude(apiKey: string, system: string, userMsg: string, maxTokens = 2048): Promise<string> {
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -587,19 +587,56 @@ export async function claudeSearch(query: string, apiKey: string): Promise<Sound
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: `Design 3 synth presets that sound like: "${query}"` }],
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: userMsg }],
     }),
   });
-
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error((err as { error?: { message?: string } }).error?.message ?? `API error ${resp.status}`);
   }
-
   const data = await resp.json() as { content: Array<{ type: string; text: string }> };
-  const text = data.content.find(b => b.type === 'text')?.text ?? '';
+  return data.content.find(b => b.type === 'text')?.text ?? '';
+}
+
+const ASK_SYSTEM = `You are a sound designer assistant helping a user craft a synth preset for a website or app.
+Given a brief description, ask 2–3 short, specific clarifying questions that will meaningfully improve your ability to design the right sound.
+Focus on: context/platform, mood/character, duration, and any reference sounds they have in mind.
+Return ONLY a JSON array of question strings. No explanation. No markdown. Example: ["Question one?", "Question two?", "Question three?"]`;
+
+export async function claudeAsk(query: string, apiKey: string): Promise<string[]> {
+  const text = await callClaude(
+    apiKey,
+    ASK_SYSTEM,
+    `I want a sound that sounds like: "${query}"`,
+    256
+  );
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  try {
+    const arr = JSON.parse(match[0]) as unknown[];
+    return arr.filter((q): q is string => typeof q === 'string').slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+export async function claudeSearch(
+  query: string,
+  apiKey: string,
+  answers?: Record<string, string>
+): Promise<SoundSuggestion[]> {
+  let userMsg = `Design 3 synth presets that sound like: "${query}"`;
+  if (answers && Object.keys(answers).length > 0) {
+    const qaBlock = Object.entries(answers)
+      .filter(([, v]) => v.trim())
+      .map(([q, a]) => `Q: ${q}\nA: ${a}`)
+      .join('\n');
+    if (qaBlock) userMsg += `\n\nAdditional context from the user:\n${qaBlock}`;
+  }
+
+  const text = await callClaude(apiKey, SYSTEM_PROMPT, userMsg);
 
   // Extract JSON array from response (handle cases where model wraps in markdown)
   const jsonMatch = text.match(/\[[\s\S]*\]/);

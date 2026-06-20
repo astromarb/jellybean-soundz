@@ -53,7 +53,15 @@ export default function SoundLibraryItem({
 
       {/* Name + type */}
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-gray-100 truncate">{sound.name}</div>
+        <div className="flex items-center gap-1">
+          <span className="text-sm font-medium text-gray-100 truncate">{sound.name}</span>
+          {sound.tags?.includes('ai') && (
+            <span title="AI-generated" className="text-[9px] text-violet-400 shrink-0">✨</span>
+          )}
+          {sound.tags?.includes('seed') && (
+            <span title="Built-in preset" className="text-[9px] text-emerald-500 shrink-0">🌱</span>
+          )}
+        </div>
         <div className="text-xs text-gray-500 font-mono">{shortType}</div>
       </div>
 

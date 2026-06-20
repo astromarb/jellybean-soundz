@@ -86,6 +86,7 @@ export interface Sound {
   color: string;
   duration: number; // seconds
   createdAt: number;
+  tags?: string[]; // e.g. ['ai', 'seed', 'imported', 'recorded']
 }
 
 export interface PadAssignment {

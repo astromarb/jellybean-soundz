@@ -363,7 +363,7 @@ export default function App() {
             setSoundName(name);
           }}
           onSave={async (name, sp, ef) => {
-            await addSound(name, sp, ef, 2);
+            await addSound(name, sp, ef, 2, ['ai']);
           }}
           onClose={() => setShowDescriptor(false)}
         />

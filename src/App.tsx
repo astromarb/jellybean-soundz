@@ -15,6 +15,7 @@ import MagazinePageNav from './components/MagazinePageNav';
 import ChainerTab from './components/ChainerTab';
 import JellyBeatz from './components/JellyBeatz';
 import RecordModal from './components/RecordModal';
+import SoundDescriptor from './components/SoundDescriptor';
 
 type MacroTab = 'soundboard' | 'chainer' | 'beatz';
 
@@ -64,6 +65,7 @@ export default function App() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioPrompt, setAudioPrompt] = useState(true);
   const [showRecord, setShowRecord] = useState(false);
+  const [showDescriptor, setShowDescriptor] = useState(false);
 
   const loading = soundsLoading || pagesLoading;
 
@@ -289,6 +291,7 @@ export default function App() {
                 onNewSound={handleNewSound}
                 onImportSounds={importSounds}
                 onRecord={() => setShowRecord(true)}
+                onDescribe={() => setShowDescriptor(true)}
               />
             </div>
 
@@ -345,6 +348,24 @@ export default function App() {
         <RecordModal
           onImport={importSounds}
           onClose={() => setShowRecord(false)}
+        />
+      )}
+
+      {/* ── AI Sound Descriptor Modal ── */}
+      {showDescriptor && (
+        <SoundDescriptor
+          audioEnabled={audioEnabled}
+          enableAudio={enableAudio}
+          onLoad={(name, sp, ef) => {
+            handleNewSound();
+            setSynthParams(sp);
+            setEffects(ef);
+            setSoundName(name);
+          }}
+          onSave={async (name, sp, ef) => {
+            await addSound(name, sp, ef, 2);
+          }}
+          onClose={() => setShowDescriptor(false)}
         />
       )}
     </div>

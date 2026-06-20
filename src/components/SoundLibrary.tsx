@@ -12,6 +12,7 @@ interface SoundLibraryProps {
   onNewSound: () => void;
   onImportSounds?: (files: File[]) => void;
   onRecord?: () => void;
+  onDescribe?: () => void;
 }
 
 export default function SoundLibrary({
@@ -24,6 +25,7 @@ export default function SoundLibrary({
   onNewSound,
   onImportSounds,
   onRecord,
+  onDescribe,
 }: SoundLibraryProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,6 +45,15 @@ export default function SoundLibrary({
         <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Library</h2>
         <div className="flex items-center gap-1">
           <span className="text-xs text-gray-600 font-mono mr-1">{sounds.length}</span>
+          {onDescribe && (
+            <button
+              onClick={onDescribe}
+              title="AI Sound Designer — describe a sound in plain English"
+              className="p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors text-sm"
+            >
+              ✨
+            </button>
+          )}
           {onRecord && (
             <button
               onClick={onRecord}

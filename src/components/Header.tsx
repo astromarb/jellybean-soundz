@@ -1,10 +1,17 @@
 import React from 'react';
+import { AppMode } from '../types';
+import { MODE_INFO } from '../lib/rights';
 
 interface HeaderProps {
   onExportAll: () => void;
+  mode: AppMode;
+  onModeChange: (m: AppMode) => void;
 }
 
-export default function Header({ onExportAll }: HeaderProps) {
+const MODES: AppMode[] = ['personal', 'commercial', 'research'];
+
+export default function Header({ onExportAll, mode, onModeChange }: HeaderProps) {
+  const active = MODE_INFO[mode];
   return (
     <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0">
       <div className="flex items-center gap-2">
@@ -18,6 +25,32 @@ export default function Header({ onExportAll }: HeaderProps) {
         <span className="ml-2 text-xs text-gray-500 font-mono bg-gray-800 px-2 py-0.5 rounded">
           v0.1.0
         </span>
+      </div>
+
+      {/* Workspace mode selector */}
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-0.5 bg-gray-800 border border-gray-700 rounded-lg p-0.5">
+          {MODES.map((m) => {
+            const info = MODE_INFO[m];
+            const isActive = m === mode;
+            return (
+              <button
+                key={m}
+                onClick={() => onModeChange(m)}
+                title={info.blurb}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  isActive ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                <span className="mr-1">{info.emoji}</span>
+                {info.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="hidden lg:block text-[10px] text-gray-500 max-w-[18rem] truncate" title={active.blurb}>
+          {active.blurb}
+        </p>
       </div>
 
       <div className="flex items-center gap-2">

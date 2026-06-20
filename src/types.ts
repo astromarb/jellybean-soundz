@@ -78,6 +78,35 @@ export interface EffectsParams {
   bitCrusher: BitCrusherParams;
 }
 
+// ── License / rights metadata ──────────────────────────────────────────────
+// Every sound knows where it came from and what it may legally be used for.
+export type SoundSource = 'tone_synth' | 'ai_api' | 'sample_library' | 'user_upload';
+
+export type LicenseScope =
+  | 'personal'
+  | 'commercial_individual'
+  | 'commercial_org'
+  | 'research_only'
+  | 'unknown';
+
+// The three workspace modes the app can operate in.
+export type AppMode = 'personal' | 'commercial' | 'research';
+
+export interface SoundRights {
+  source: SoundSource;
+  provider?: string;          // 'Claude (procedural)' | 'ElevenLabs' | 'Stability' | 'User'
+  model?: string;
+  prompt?: string;
+  planAtGeneration?: string;  // e.g. 'commercial' | 'personal' (for AI-API sounds)
+  licenseScope: LicenseScope;
+  attributionRequired: boolean;
+  canModify: boolean;
+  canExport: boolean;
+  canUseInClientWork: boolean;
+  termsUrl?: string;
+  generatedAt: number;
+}
+
 export interface Sound {
   id: string;
   name: string;
@@ -86,6 +115,8 @@ export interface Sound {
   color: string;
   duration: number; // seconds
   createdAt: number;
+  tags?: string[]; // e.g. ['ai', 'seed', 'imported', 'recorded']
+  rights?: SoundRights; // optional for back-compat; migration + runtime backfill fill it
 }
 
 export interface PadAssignment {
@@ -166,7 +197,8 @@ export const SYNTH_TYPES: SynthType[] = [
 
 export type InstrumentType =
   | 'Piano' | 'Violin' | 'Cello' | 'Choir'
-  | 'Brass' | 'Flute' | 'Lead' | 'Pad' | 'Bass' | 'Arp';
+  | 'Brass' | 'Flute' | 'Lead' | 'Pad' | 'Bass' | 'Arp'
+  | 'Strings' | 'Pluck' | 'Kick' | 'Snare' | 'HiHat';
 
 export type NoteDuration = '1n' | '2n' | '4n' | '8n' | '16n' | '32n';
 
@@ -181,7 +213,7 @@ export const NOTE_DURATIONS: { value: NoteDuration; label: string; short: string
 
 export interface BeatzStep {
   active: boolean;
-  note: string;       // e.g. 'C4' - defaults to track's defaultNote
+  note: string;       // e.g. 'C4', or a chord as comma-separated notes 'C4,E4,G4'
   velocity: number;   // 0-1
   duration?: NoteDuration; // optional per-step override; falls back to track.stepDuration
 }
@@ -197,6 +229,10 @@ export interface BeatzTrack {
   steps: BeatzStep[];
   volume: number;   // dB, -40 to 0
   muted: boolean;
+  solo?: boolean;
+  pan?: number;     // -1 (L) to 1 (R), default 0
+  reverb?: number;  // reverb send amount 0-1, default 0
+  delay?: number;   // delay send amount 0-1, default 0
   color: string;
 }
 
@@ -204,7 +240,7 @@ export interface BeatzProject {
   id: string;
   name: string;
   bpm: number;        // 60-200
-  bars: number;       // 1-8
+  bars: number;       // 1-32
   stepsPerBar: number; // always 16
   tracks: BeatzTrack[];
   createdAt: number;

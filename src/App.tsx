@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import * as Tone from 'tone';
-import { Sound, SynthParams, EffectsParams, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from './types';
+import { Sound, SynthParams, EffectsParams, SoundRights, DEFAULT_SYNTH_PARAMS, DEFAULT_EFFECTS } from './types';
 import { useSounds } from './hooks/useSounds';
 import { usePages } from './hooks/usePages';
+import { useAppMode } from './hooks/useAppMode';
 import { playAudioBlob, playDirect, renderSoundToWav } from './lib/audio';
+import { confirmExportRights } from './lib/exportGuard';
 import * as db from './lib/db';
 
 import Header from './components/Header';
@@ -15,6 +17,7 @@ import MagazinePageNav from './components/MagazinePageNav';
 import ChainerTab from './components/ChainerTab';
 import JellyBeatz from './components/JellyBeatz';
 import RecordModal from './components/RecordModal';
+import SoundDescriptor from './components/SoundDescriptor';
 
 type MacroTab = 'soundboard' | 'chainer' | 'beatz';
 
@@ -23,12 +26,15 @@ export default function App() {
     sounds,
     loading: soundsLoading,
     addSound,
+    addSoundFromBlob,
     updateSound,
     deleteSound,
     downloadSound,
     exportAllSounds,
     importSounds,
   } = useSounds();
+
+  const [mode, setMode] = useAppMode();
 
   const {
     magazines,
@@ -64,6 +70,7 @@ export default function App() {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioPrompt, setAudioPrompt] = useState(true);
   const [showRecord, setShowRecord] = useState(false);
+  const [showDescriptor, setShowDescriptor] = useState(false);
 
   const loading = soundsLoading || pagesLoading;
 
@@ -136,6 +143,20 @@ export default function App() {
     },
     [deleteSound, selectedSound, editingSound]
   );
+
+  // Export paths gated by the active mode's rights policy.
+  const handleDownloadSound = useCallback(
+    async (sound: Sound) => {
+      if (!confirmExportRights([sound], mode, 'download')) return;
+      await downloadSound(sound);
+    },
+    [downloadSound, mode]
+  );
+
+  const handleExportAll = useCallback(async () => {
+    if (!confirmExportRights(sounds, mode, 'library export')) return;
+    await exportAllSounds();
+  }, [exportAllSounds, sounds, mode]);
 
   const handleNewSound = useCallback(() => {
     setSelectedSound(null);
@@ -233,7 +254,7 @@ export default function App() {
       )}
 
       {/* Header */}
-      <Header onExportAll={exportAllSounds} />
+      <Header onExportAll={handleExportAll} mode={mode} onModeChange={setMode} />
 
       {/* Macro tab switcher */}
       <div className="flex border-b border-gray-800 bg-gray-900 shrink-0">
@@ -285,10 +306,11 @@ export default function App() {
                 onSelectSound={handleSelectSound}
                 onPlaySound={handlePlaySound}
                 onDeleteSound={handleDeleteSound}
-                onDownloadSound={downloadSound}
+                onDownloadSound={handleDownloadSound}
                 onNewSound={handleNewSound}
                 onImportSounds={importSounds}
                 onRecord={() => setShowRecord(true)}
+                onDescribe={() => setShowDescriptor(true)}
               />
             </div>
 
@@ -332,12 +354,13 @@ export default function App() {
           sounds={sounds}
           audioEnabled={audioEnabled}
           enableAudio={enableAudio}
+          mode={mode}
         />
       )}
 
       {/* ── JELLYBEATZ tab ── */}
       {macroTab === 'beatz' && (
-        <JellyBeatz sounds={sounds} audioEnabled={audioEnabled} enableAudio={enableAudio} />
+        <JellyBeatz sounds={sounds} audioEnabled={audioEnabled} enableAudio={enableAudio} mode={mode} />
       )}
 
       {/* ── Record Modal ── */}
@@ -345,6 +368,28 @@ export default function App() {
         <RecordModal
           onImport={importSounds}
           onClose={() => setShowRecord(false)}
+        />
+      )}
+
+      {/* ── AI Sound Descriptor Modal ── */}
+      {showDescriptor && (
+        <SoundDescriptor
+          audioEnabled={audioEnabled}
+          enableAudio={enableAudio}
+          mode={mode}
+          onLoad={(name, sp, ef) => {
+            handleNewSound();
+            setSynthParams(sp);
+            setEffects(ef);
+            setSoundName(name);
+          }}
+          onSave={async (name, sp, ef, duration, rights) => {
+            await addSound(name, sp, ef, duration, ['ai'], rights);
+          }}
+          onSaveBlob={async (name, blob, duration, rights) => {
+            await addSoundFromBlob(name, blob, duration, rights, ['ai']);
+          }}
+          onClose={() => setShowDescriptor(false)}
         />
       )}
     </div>

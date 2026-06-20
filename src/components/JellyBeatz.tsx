@@ -6,12 +6,16 @@ import React, {
   useLayoutEffect,
 } from 'react';
 import HumModal from './HumModal';
+import PianoRoll from './PianoRoll';
 import * as Tone from 'tone';
-import { Sound, JELLYBEAN_COLORS, InstrumentType, NoteDuration, NOTE_DURATIONS, BeatzTrack } from '../types';
+import { Sound, AppMode, JELLYBEAN_COLORS, InstrumentType, NoteDuration, NOTE_DURATIONS, BeatzTrack } from '../types';
+import { confirmExportRights } from '../lib/exportGuard';
 import { useBeatz } from '../hooks/useBeatz';
 import {
   startBeatz,
   stopBeatz,
+  pauseBeatz,
+  resumeBeatz,
   exportBeatz,
   INSTRUMENT_EMOJI,
   INSTRUMENT_LABEL,
@@ -26,6 +30,7 @@ interface Props {
   sounds: Sound[];
   audioEnabled: boolean;
   enableAudio: () => Promise<void>;
+  mode: AppMode;
 }
 
 interface ContextMenu {
@@ -48,9 +53,26 @@ interface StepEditorState {
 // ---------------------------------------------------------------------------
 
 const INSTRUMENTS: InstrumentType[] = [
-  'Piano', 'Violin', 'Cello', 'Choir',
+  'Piano', 'Pluck', 'Strings', 'Violin', 'Cello', 'Choir',
   'Brass', 'Flute', 'Lead', 'Pad', 'Bass', 'Arp',
+  'Kick', 'Snare', 'HiHat',
 ];
+
+const SIDEBAR_W = 264;
+
+// Width (px) of one 16th-note step cell — drives the horizontal zoom level
+const STEP_W_MIN = 8;
+const STEP_W_MAX = 52;
+const STEP_W_DEFAULT = 20;
+
+// Compute the pixel width of one bar at a given step cell size
+function barPixelWidth(stepW: number, stepsPerBar: number): number {
+  const beatsPerBar = stepsPerBar / 4;
+  // beat group = 4 steps + 3 inner gaps (gap-0.5 = 2px) + 2px left+right padding
+  const beatGroupW = 4 * stepW + 3 * 2 + 4;
+  // bar = N beat groups + (N-1) gaps between groups (gap-0.5 = 2px)
+  return beatsPerBar * beatGroupW + (beatsPerBar - 1) * 2;
+}
 
 const NOTES_IN_OCTAVE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const OCTAVES = [2, 3, 4, 5];
@@ -201,15 +223,86 @@ function DurationIcon({ value }: { value: NoteDuration }) {
   );
 }
 
+// PlayheadStrip: moves a DOM div directly in a RAF loop — zero React re-renders
+const PlayheadStrip = React.memo(function PlayheadStrip({
+  stepRef,
+  stepW,
+  stepsPerBar,
+  onBarChange,
+  active,
+}: {
+  stepRef: React.MutableRefObject<number>;
+  stepW: number;
+  stepsPerBar: number;
+  onBarChange: (bar: number) => void;
+  active: boolean;
+}) {
+  const elRef = useRef<HTMLDivElement>(null);
+  const prevBarRef = useRef(-1);
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (!active) {
+      if (el) el.style.left = '-9999px';
+      prevBarRef.current = -1;
+      return;
+    }
+    const beatsPerBar = stepsPerBar / 4;
+    const beatGroupW = 4 * stepW + 3 * 2 + 4;
+    const barW = beatsPerBar * beatGroupW + (beatsPerBar - 1) * 2;
+    const totalBarW = barW + 13;
+
+    let raf: number;
+    const loop = () => {
+      const step = stepRef.current;
+      if (el && step >= 0) {
+        const bar = Math.floor(step / stepsPerBar);
+        const beatInBar = Math.floor((step % stepsPerBar) / 4);
+        const subInBeat = step % 4;
+        const left = SIDEBAR_W + 8
+          + bar * totalBarW
+          + beatInBar * (beatGroupW + 2)
+          + 2
+          + subInBeat * (stepW + 2);
+        el.style.left = left + 'px';
+        el.style.width = stepW + 'px';
+        if (bar !== prevBarRef.current) {
+          prevBarRef.current = bar;
+          onBarChange(bar);
+        }
+      } else if (el && step < 0) {
+        el.style.left = '-9999px';
+        prevBarRef.current = -1;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [active, stepRef, stepW, stepsPerBar, onBarChange]);
+
+  return (
+    <div
+      ref={elRef}
+      className="absolute top-0 bottom-0 pointer-events-none z-10"
+      style={{
+        left: -9999,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderLeft: '2px solid rgba(255,255,255,0.45)',
+      }}
+    />
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 
-export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props) {
+export default function JellyBeatz({ sounds, audioEnabled, enableAudio, mode }: Props) {
   const beatz = useBeatz(sounds);
 
   // Playback
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -219,6 +312,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [stepEditor, setStepEditor] = useState<StepEditorState | null>(null);
   const [showHumModal, setShowHumModal] = useState(false);
+  const [pianoRollTrackId, setPianoRollTrackId] = useState<string | null>(null);
   const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renamingTrackId, setRenamingTrackId] = useState<string | null>(null);
@@ -227,10 +321,17 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
   const [bpmInput, setBpmInput] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [showNewProjectInput, setShowNewProjectInput] = useState(false);
+  const [stepW, setStepW] = useState(STEP_W_DEFAULT);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const soundPickerRef = useRef<HTMLDivElement>(null);
   const instrPickerRef = useRef<HTMLDivElement>(null);
+  // Decouples Tone.js audio callback from React renders: write step to ref,
+  // read it in a RAF loop so state updates happen at display refresh rate (~60fps)
+  // rather than on every audio scheduler tick.
+  const currentStepRef = useRef(-1);
+  const [currentBar, setCurrentBar] = useState(-1);
+  const handleBarChange = useCallback((bar: number) => { setCurrentBar(bar); }, []);
 
   const project = beatz.activeProject;
 
@@ -246,6 +347,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     if (isPlaying) {
       stopBeatz();
       setIsPlaying(false);
+      setIsPaused(false);
       setCurrentStep(-1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,25 +375,80 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     return () => document.removeEventListener('mousedown', handle);
   }, [contextMenu]);
 
-  // ── Play / Stop ──
-  const handlePlayStop = useCallback(async () => {
+  // ── RAF loop: only update React state when PianoRoll needs it ──
+  useEffect(() => {
+    if (!isPlaying || isPaused || !pianoRollTrackId) return;
+    let raf: number;
+    const sync = () => {
+      setCurrentStep(prev => {
+        const next = currentStepRef.current;
+        return next === prev ? prev : next;
+      });
+      raf = requestAnimationFrame(sync);
+    };
+    raf = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying, isPaused, pianoRollTrackId]);
+
+  // ── Auto-scroll: fires when bar changes, not every step ──
+  useEffect(() => {
+    if (currentBar < 0 || !gridRef.current || !project) return;
+    const container = gridRef.current;
+    const barW = barPixelWidth(stepW, project.stepsPerBar) + 13;
+    const barPx = SIDEBAR_W + currentBar * barW;
+    if (currentBar === 0) {
+      container.scrollTo({ left: 0, behavior: 'smooth' });
+      return;
+    }
+    const visibleRight = container.scrollLeft + container.clientWidth;
+    if (barPx > visibleRight - container.clientWidth * 0.3) {
+      container.scrollTo({
+        left: Math.max(0, barPx - SIDEBAR_W - 20),
+        behavior: 'smooth',
+      });
+    }
+  }, [currentBar, project, stepW]);
+
+  // ── Transport ──
+  const handlePlay = useCallback(async () => {
     if (!audioEnabled) await enableAudio();
-    if (isPlaying) {
-      stopBeatz();
-      setIsPlaying(false);
-      setCurrentStep(-1);
-    } else if (project) {
-      await Tone.start();
+    if (isPlaying && isPaused) {
+      resumeBeatz();
+      setIsPaused(false);
+    } else if (!isPlaying && project) {
+      // Write step index to ref only — no React setState from audio callback
       await startBeatz(project, sounds, (step) => {
-        setCurrentStep(step);
+        currentStepRef.current = step;
       });
       setIsPlaying(true);
+      setIsPaused(false);
     }
-  }, [isPlaying, project, sounds, audioEnabled, enableAudio]);
+  }, [isPlaying, isPaused, project, sounds, audioEnabled, enableAudio]);
+
+  const handlePause = useCallback(() => {
+    if (!isPlaying || isPaused) return;
+    pauseBeatz();
+    setIsPaused(true);
+  }, [isPlaying, isPaused]);
+
+  const handleStop = useCallback(() => {
+    stopBeatz();
+    setIsPlaying(false);
+    setIsPaused(false);
+    setCurrentStep(-1);
+    setCurrentBar(-1);
+    currentStepRef.current = -1;
+  }, []);
 
   // ── Export ──
   const handleExport = useCallback(async () => {
     if (!project || isExporting) return;
+    // Only sound-tracks carry external rights; instrument tracks are procedural.
+    const usedSounds = project.tracks
+      .filter((t) => t.type === 'sound' && t.soundId)
+      .map((t) => sounds.find((s) => s.id === t.soundId))
+      .filter((s): s is Sound => !!s);
+    if (!confirmExportRights(usedSounds, mode, 'beat export')) return;
     if (!audioEnabled) await enableAudio();
     setIsExporting(true);
     try {
@@ -303,7 +460,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
     } finally {
       setIsExporting(false);
     }
-  }, [project, sounds, audioEnabled, enableAudio, isExporting]);
+  }, [project, sounds, audioEnabled, enableAudio, isExporting, mode]);
 
   // ── BPM helpers ──
   const startEditBpm = () => {
@@ -549,7 +706,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
             onChange={e => beatz.setBars(parseInt(e.target.value, 10))}
             className="bg-gray-800 border border-gray-700 text-white text-sm rounded px-1 py-1 font-mono cursor-pointer"
           >
-            {[1, 2, 4, 8].map(b => (
+            {[1, 2, 4, 8, 16, 32].map(b => (
               <option key={b} value={b}>{b}</option>
             ))}
           </select>
@@ -561,18 +718,37 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
         <span className="text-xs text-gray-500 font-mono">{calcDuration()}</span>
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Play/Stop */}
-          <button
-            onClick={handlePlayStop}
-            className={`
-              px-4 py-1.5 rounded-lg text-sm font-bold transition-all
-              ${isPlaying
-                ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/40'
-                : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/40'}
-            `}
-          >
-            {isPlaying ? '⏹ Stop' : '▶ Play'}
-          </button>
+          {/* Transport: Play / Pause / Stop */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handlePlay}
+              disabled={isPlaying && !isPaused}
+              className={`
+                px-4 py-1.5 rounded-lg text-sm font-bold transition-all
+                ${isPlaying && !isPaused
+                  ? 'bg-gray-700 text-gray-400 cursor-default'
+                  : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/40'}
+              `}
+            >
+              ▶ {isPaused ? 'Resume' : 'Play'}
+            </button>
+            <button
+              onClick={handlePause}
+              disabled={!isPlaying || isPaused}
+              className="px-3 py-1.5 rounded-lg text-sm font-bold bg-gray-700 hover:bg-gray-600 text-white transition-colors disabled:opacity-40"
+              title="Pause"
+            >
+              ⏸
+            </button>
+            <button
+              onClick={handleStop}
+              disabled={!isPlaying}
+              className="px-3 py-1.5 rounded-lg text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-40 disabled:bg-gray-700"
+              title="Stop"
+            >
+              ⏹
+            </button>
+          </div>
 
           {/* Export */}
           <button
@@ -656,6 +832,45 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
         >
           🎵 Hum Melody
         </button>
+
+        {/* Demo song */}
+        <button
+          onClick={() => beatz.loadDemoSong()}
+          title="Load the 32-bar showcase composition as a new project"
+          className="px-3 py-1 text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+        >
+          ✨ Demo Song
+        </button>
+
+        {/* Zoom / step-width control */}
+        <div className="ml-auto flex items-center gap-1.5 pl-2 border-l border-gray-700">
+          <span className="text-[10px] text-gray-500 font-mono">Zoom</span>
+          <button
+            onClick={() => setStepW(w => Math.max(STEP_W_MIN, w - 4))}
+            className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded transition-colors"
+            title="Zoom out"
+          >−</button>
+          <input
+            type="range"
+            min={STEP_W_MIN}
+            max={STEP_W_MAX}
+            step={2}
+            value={stepW}
+            onChange={e => setStepW(parseInt(e.target.value, 10))}
+            className="w-20 h-1.5 accent-violet-500 cursor-pointer"
+            title={`Step width: ${stepW}px`}
+          />
+          <button
+            onClick={() => setStepW(w => Math.min(STEP_W_MAX, w + 4))}
+            className="w-5 h-5 flex items-center justify-center text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded transition-colors"
+            title="Zoom in"
+          >+</button>
+          <button
+            onClick={() => setStepW(STEP_W_DEFAULT)}
+            className="text-[9px] text-gray-500 hover:text-gray-300 font-mono transition-colors"
+            title="Reset zoom"
+          >reset</button>
+        </div>
       </div>
 
       {/* ── Grid Area ── */}
@@ -683,17 +898,17 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
             </div>
           </div>
         ) : (
-          <div className="min-w-max">
+          <div className="min-w-max relative">
             {/* Bar labels */}
             <div className="flex sticky top-0 z-10 bg-gray-950/95 backdrop-blur-sm border-b border-gray-800">
               {/* sidebar spacer */}
-              <div className="shrink-0" style={{ width: 240 }} />
+              <div className="shrink-0" style={{ width: SIDEBAR_W }} />
               <div className="flex">
                 {Array.from({ length: project.bars }, (_, bar) => (
                   <div
                     key={bar}
                     className="flex gap-0.5"
-                    style={{ width: project.stepsPerBar * 28 + (project.stepsPerBar / 4 - 1) * 2 }}
+                    style={{ width: barPixelWidth(stepW, project.stepsPerBar) }}
                   >
                     <div className="px-1 py-1 text-[10px] text-gray-500 font-mono w-full text-center">
                       Bar {bar + 1}
@@ -702,6 +917,15 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                 ))}
               </div>
             </div>
+
+            {/* Playhead overlay — updates via direct DOM, no React re-renders */}
+            <PlayheadStrip
+              stepRef={currentStepRef}
+              stepW={stepW}
+              stepsPerBar={project.stepsPerBar}
+              onBarChange={handleBarChange}
+              active={isPlaying && !isPaused}
+            />
 
             {/* Tracks */}
             {project.tracks.map(track => {
@@ -714,7 +938,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                   {/* Track Sidebar */}
                   <div
                     className="shrink-0 flex flex-col justify-between px-2 py-1.5 border-r border-gray-800 cursor-context-menu"
-                    style={{ width: 240 }}
+                    style={{ width: SIDEBAR_W }}
                     onContextMenu={e => openContextMenu(e, track.id)}
                   >
                     <div className="flex items-center gap-1.5">
@@ -755,6 +979,17 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         </span>
                       )}
 
+                      {/* Piano roll (instrument tracks) */}
+                      {track.type === 'instrument' && (
+                        <button
+                          onClick={() => setPianoRollTrackId(track.id)}
+                          className="shrink-0 w-5 h-5 rounded text-[10px] transition-all border bg-gray-800 border-gray-600 text-gray-400 hover:text-white hover:border-violet-500"
+                          title="Open piano roll"
+                        >
+                          🎹
+                        </button>
+                      )}
+
                       {/* Mute button */}
                       <button
                         onClick={() => beatz.toggleMute(track.id)}
@@ -767,6 +1002,20 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         title={track.muted ? 'Unmute' : 'Mute'}
                       >
                         M
+                      </button>
+
+                      {/* Solo button */}
+                      <button
+                        onClick={() => beatz.toggleSolo(track.id)}
+                        className={`
+                          shrink-0 w-5 h-5 rounded text-[9px] font-bold transition-all border
+                          ${track.solo
+                            ? 'bg-yellow-500 border-yellow-400 text-gray-900'
+                            : 'bg-gray-800 border-gray-600 text-gray-400 hover:text-white'}
+                        `}
+                        title={track.solo ? 'Unsolo' : 'Solo'}
+                      >
+                        S
                       </button>
                     </div>
 
@@ -783,6 +1032,51 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         className="flex-1 h-1.5 accent-violet-500 cursor-pointer"
                       />
                       <span className="text-[9px] text-gray-500 font-mono w-7 text-right">{track.volume}dB</span>
+                    </div>
+
+                    {/* Pan slider */}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[9px] text-gray-500 font-mono w-4">Pan</span>
+                      <input
+                        type="range"
+                        min={-1}
+                        max={1}
+                        step={0.05}
+                        value={track.pan ?? 0}
+                        onChange={e => beatz.setTrackPan(track.id, parseFloat(e.target.value))}
+                        onDoubleClick={() => beatz.setTrackPan(track.id, 0)}
+                        className="flex-1 h-1.5 accent-cyan-500 cursor-pointer"
+                        title="Pan (double-click to center)"
+                      />
+                      <span className="text-[9px] text-gray-500 font-mono w-7 text-right">
+                        {(track.pan ?? 0) === 0 ? 'C' : `${(track.pan ?? 0) < 0 ? 'L' : 'R'}${Math.round(Math.abs(track.pan ?? 0) * 100)}`}
+                      </span>
+                    </div>
+
+                    {/* FX sends */}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[9px] text-gray-500 font-mono w-4">Rev</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={track.reverb ?? 0}
+                        onChange={e => beatz.setTrackReverb(track.id, parseFloat(e.target.value))}
+                        className="flex-1 h-1.5 accent-pink-500 cursor-pointer"
+                        title="Reverb send"
+                      />
+                      <span className="text-[9px] text-gray-500 font-mono w-4">Dly</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={track.delay ?? 0}
+                        onChange={e => beatz.setTrackDelay(track.id, parseFloat(e.target.value))}
+                        className="flex-1 h-1.5 accent-emerald-500 cursor-pointer"
+                        title="Delay send"
+                      />
                     </div>
 
                     {/* Default note (instrument tracks) */}
@@ -831,12 +1125,12 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                               const stepIdx = bar * project.stepsPerBar + beat * 4 + sub;
                               const step = track.steps[stepIdx];
                               const isActive = step?.active ?? false;
-                              const isCurrent = isPlaying && stepIdx === currentStep;
                               const effectiveDur = step?.duration || track.stepDuration || '16n';
                               const isNonDefaultDur = isActive && effectiveDur !== '16n';
                               const durShort = NOTE_DURATIONS.find(d => d.value === effectiveDur)?.short;
+                              const stepNotes = (step?.note || track.defaultNote).split(',');
                               const noteDisplay = track.type === 'instrument' && isActive
-                                ? (step.note || track.defaultNote).replace(/\d/, '')
+                                ? stepNotes[0].replace(/\d/g, '') + (stepNotes.length > 1 ? '+' : '')
                                 : null;
 
                               return (
@@ -849,11 +1143,10 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                     ${isActive
                                       ? 'border border-white/20'
                                       : 'bg-gray-800/80 border border-gray-700/50 hover:bg-gray-700/80'}
-                                    ${isCurrent ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-950' : ''}
                                   `}
                                   style={{
-                                    width: 26,
-                                    height: 26,
+                                    width: stepW,
+                                    height: Math.max(18, stepW),
                                     backgroundColor: isActive ? track.color : undefined,
                                     boxShadow: isActive
                                       ? `0 0 8px ${track.color}88, 0 0 3px ${track.color}`
@@ -865,8 +1158,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                       : `Step ${stepIdx + 1}${isNonDefaultDur ? ` / ${durShort}` : ''}`
                                   }
                                 >
-                                  {/* Note name label */}
-                                  {noteDisplay && !isNonDefaultDur && (
+                                  {/* Note name label — only shown when cells are wide enough */}
+                                  {stepW >= 18 && noteDisplay && !isNonDefaultDur && (
                                     <span
                                       className="absolute inset-0 flex items-center justify-center text-[8px] font-bold pointer-events-none"
                                       style={{ color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
@@ -874,8 +1167,8 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                                       {noteDisplay}
                                     </span>
                                   )}
-                                  {/* Duration badge (shown when non-default, overrides note label) */}
-                                  {isNonDefaultDur && (
+                                  {/* Duration badge */}
+                                  {stepW >= 18 && isNonDefaultDur && (
                                     <span
                                       className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none leading-none gap-px"
                                       style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
@@ -891,7 +1184,7 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
                         ))}
                         {/* Bar separator */}
                         {bar < project.bars - 1 && (
-                          <div className="w-px h-6 bg-gray-600 mx-1 self-center" />
+                          <div className="w-px bg-gray-600 mx-1 self-center" style={{ height: Math.max(18, stepW) }} />
                         )}
                       </React.Fragment>
                     ))}
@@ -959,6 +1252,23 @@ export default function JellyBeatz({ sounds, audioEnabled, enableAudio }: Props)
           anchorY={stepEditor.y}
         />
       )}
+
+      {/* ── Piano Roll ── */}
+      {pianoRollTrackId && project && (() => {
+        const prTrack = project.tracks.find(t => t.id === pianoRollTrackId);
+        if (!prTrack || prTrack.type !== 'instrument') return null;
+        return (
+          <PianoRoll
+            track={prTrack}
+            bars={project.bars}
+            stepsPerBar={project.stepsPerBar}
+            isPlaying={isPlaying && !isPaused}
+            currentStep={currentStep}
+            onSetSteps={(steps) => beatz.setTrackSteps(prTrack.id, steps)}
+            onClose={() => setPianoRollTrackId(null)}
+          />
+        );
+      })()}
 
       {/* ── Hum Modal ── */}
       {showHumModal && project && (
